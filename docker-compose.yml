@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  metadata-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_password
+      POSTGRES_DB: db_control_center
+    ports:
+      - "5432:5432"
+    volumes:
+      - metadata_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  target-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: target_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - target_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Almaty
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=db_control_center
+      - DB_POSTGRESDB_HOST=metadata-postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=admin
+      - DB_POSTGRESDB_PASSWORD=admin_password
+      # Разрешаем ноде Code выполнять системные скрипты
+      - NODE_FUNCTION_ALLOW_BUILTIN=*
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - metadata-postgres
+      - minio
+    restart: unless-stopped
+
+volumes:
+  metadata_data:
+  target_data:
+  minio_data:
+  n8n_data:
