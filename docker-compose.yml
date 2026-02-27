@@ -1,20 +1,31 @@
 version: '3.8'
 
 services:
+  # Основная БД для управления резервными копиями и аналитики
   metadata-postgres:
     image: postgres:15-alpine
+    container_name: db-control-center-postgres
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin_password
-      POSTGRES_DB: db_control_center
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-control_center}
     ports:
       - "5432:5432"
     volumes:
       - metadata_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
+    networks:
+      - db_control_net
 
+  # Target база для бэкапов
   target-postgres:
     image: postgres:15-alpine
+    container_name: db-control-center-target
     environment:
       POSTGRES_USER: test_user
       POSTGRES_PASSWORD: test_password
@@ -24,50 +35,102 @@ services:
     volumes:
       - target_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - db_control_net
 
+  # S3-совместимое хранилище (MinIO)
   minio:
     image: minio/minio:latest
+    container_name: db-control-center-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minio_admin
-      MINIO_ROOT_PASSWORD: minio_password
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
     restart: unless-stopped
+    networks:
+      - db_control_net
 
-  n8n:
+  # Python микросервис для автоматизации
+  python_backend:
     build:
-      context: .
+      context: ./python-backend
       dockerfile: Dockerfile
+    container_name: db-control-center-python
     ports:
-      - "5678:5678"
+      - "8000:8000"
     environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_ENV=production
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Asia/Almaty
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_DATABASE=db_control_center
-      - DB_POSTGRESDB_HOST=metadata-postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_USER=admin
-      - DB_POSTGRESDB_PASSWORD=admin_password
-      # Разрешаем ноде Code выполнять системные скрипты
-      - NODE_FUNCTION_ALLOW_BUILTIN=*
-    volumes:
-      - n8n_data:/home/node/.n8n
+      # Database
+      DB_HOST: ${DB_HOST:-metadata-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-control_center}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-backups}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      
+      # Telegram
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      
+      # Environment
+      ENV: ${ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      metadata-postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - db_control_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js приложение
+  app:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    container_name: db-control-center-app
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: ${DB_HOST:-metadata-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-control_center}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
     depends_on:
       - metadata-postgres
-      - minio
+      - python_backend
     restart: unless-stopped
+    networks:
+      - db_control_net
 
 volumes:
   metadata_data:
   target_data:
   minio_data:
-  n8n_data:
+
+networks:
+  db_control_net:
+    driver: bridge
