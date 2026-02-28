@@ -17,12 +17,13 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const response = await fetch("http://localhost:8000/api/auth/login", {
+            const response = await fetch("/api/auth/login", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ email, password }),
+                credentials: "same-origin",
             });
 
             const data = await response.json();
@@ -30,8 +31,6 @@ export default function LoginPage() {
             if (!response.ok) {
                 throw new Error(data.detail || "Неверный email или пароль");
             }
-
-            document.cookie = `access_token=${data.access_token}; path=/; max-age=86400; SameSite=Strict`;
 
             router.push("/");
             router.refresh();
