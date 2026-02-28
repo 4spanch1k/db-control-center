@@ -5,8 +5,13 @@ PYTHON ?= python3
 BACKEND_DIR := python-backend
 FRONTEND_DIR := frontend
 MIGRATION_MSG ?= new_migration
+VENV_DIR := .venv
+VENV_BIN := $(VENV_DIR)/bin
+BACKEND_PY := $(VENV_BIN)/python
+ALEMBIC := $(VENV_BIN)/alembic
+UVICORN := $(VENV_BIN)/uvicorn
 
-.PHONY: help bootstrap dev down logs lint test frontend-install frontend-dev backend-install backend-dev migrate-up migrate-down migrate-current migrate-create
+.PHONY: help bootstrap dev down logs lint test frontend-install frontend-dev backend-install backend-dev migrate-up migrate-down migrate-current migrate-create seed-admin backend-tests
 
 help:
 	@echo "Available commands:"
@@ -21,11 +26,15 @@ help:
 	@echo "  make migrate-down     # Roll back one migration"
 	@echo "  make migrate-current  # Show current migration"
 	@echo "  make migrate-create MIGRATION_MSG=...  # Create migration"
+	@echo "  make seed-admin ADMIN_PASSWORD=... [ADMIN_EMAIL=...]"
+	@echo "  make backend-tests    # Run backend integration tests"
 
 bootstrap: backend-install frontend-install
 
 backend-install:
-	cd $(BACKEND_DIR) && $(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m venv $(VENV_DIR)
+	$(BACKEND_PY) -m pip install --upgrade pip
+	$(BACKEND_PY) -m pip install -r $(BACKEND_DIR)/requirements.txt
 
 frontend-install:
 	cd $(FRONTEND_DIR) && npm install
@@ -44,22 +53,32 @@ lint:
 	$(PYTHON) -m compileall $(BACKEND_DIR)
 
 test: lint
-	@echo "No backend test suite configured yet (lint/syntax checks passed)."
+	$(PYTHON) -m unittest discover -s $(BACKEND_DIR)/tests -p "test_*.py" -v
+
+backend-tests:
+	$(PYTHON) -m unittest discover -s $(BACKEND_DIR)/tests -p "test_*.py" -v
 
 frontend-dev:
 	cd $(FRONTEND_DIR) && npm run dev
 
 backend-dev:
-	cd $(BACKEND_DIR) && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+	cd $(BACKEND_DIR) && $(abspath $(UVICORN)) main:app --reload --host 0.0.0.0 --port 8000
 
 migrate-up:
-	cd $(BACKEND_DIR) && alembic upgrade head
+	cd $(BACKEND_DIR) && $(abspath $(ALEMBIC)) upgrade head
 
 migrate-down:
-	cd $(BACKEND_DIR) && alembic downgrade -1
+	cd $(BACKEND_DIR) && $(abspath $(ALEMBIC)) downgrade -1
 
 migrate-current:
-	cd $(BACKEND_DIR) && alembic current
+	cd $(BACKEND_DIR) && $(abspath $(ALEMBIC)) current
 
 migrate-create:
-	cd $(BACKEND_DIR) && alembic revision -m "$(MIGRATION_MSG)"
+	cd $(BACKEND_DIR) && $(abspath $(ALEMBIC)) revision -m "$(MIGRATION_MSG)"
+
+seed-admin:
+	@if [ -z "$$ADMIN_PASSWORD" ]; then echo "Set ADMIN_PASSWORD env var"; exit 1; fi
+	cd $(BACKEND_DIR) && \
+	ADMIN_EMAIL=$${ADMIN_EMAIL:-admin@example.com} \
+	ADMIN_PASSWORD=$$ADMIN_PASSWORD \
+	$(abspath $(BACKEND_PY)) scripts/seed_admin.py

@@ -140,8 +140,12 @@ make help
 make bootstrap
 make dev
 make lint
+make test
 make migrate-up
+make seed-admin ADMIN_PASSWORD="change_me"
 ```
+
+`make bootstrap` создаёт локальное Python-окружение `.venv` и устанавливает backend зависимости туда.
 
 Подробности: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
@@ -231,6 +235,8 @@ DB_PASSWORD=postgres
 # Python Backend
 LOG_LEVEL=INFO
 ENV=production
+AUTO_APPLY_MIGRATIONS=true
+MIGRATION_TIMEOUT_SEC=120
 
 # MinIO/S3
 MINIO_ENDPOINT=minio:9000

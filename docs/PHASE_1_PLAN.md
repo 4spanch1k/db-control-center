@@ -7,10 +7,14 @@
 - Added baseline migration for core schema + analytics SQL functions.
 - Added development docs (`docs/DEVELOPMENT.md`).
 - Added structure doc (`docs/PROJECT_STRUCTURE.md`).
+- Added CI pipeline (`.github/workflows/ci.yml`).
+- Replaced runtime table creation with migration-first startup in backend.
+- Added seed command/script for first admin user.
+- Added integration tests for backup/restore/cleanup critical flows.
 
-## Next tasks
+## Next tasks (Phase 2)
 
-1. Add CI pipeline: lint + backend tests + migration check.
-2. Replace runtime table creation in backend with strict migration-first startup.
-3. Add seed command for first admin user.
-4. Introduce lightweight integration tests for backup/restore API endpoints.
+1. Add stricter auth hardening (refresh tokens + secure cookie policy).
+2. Split backend into modules (`api`, `services`, `repositories`) with smaller files.
+3. Add basic observability endpoints/metrics (latency, scheduler job outcomes).
+4. Add test database fixture with dockerized Postgres for migration e2e tests.

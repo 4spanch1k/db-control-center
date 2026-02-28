@@ -7,6 +7,7 @@ import logging
 import os
 import asyncio
 import subprocess
+import sys
 from datetime import datetime
 from contextlib import asynccontextmanager
 
@@ -52,6 +53,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 BACKUP_RETENTION_DAYS = int(os.getenv("BACKUP_RETENTION_DAYS", 7))
+AUTO_APPLY_MIGRATIONS = os.getenv("AUTO_APPLY_MIGRATIONS", "true").lower() == "true"
+MIGRATION_TIMEOUT_SEC = int(os.getenv("MIGRATION_TIMEOUT_SEC", 120))
 
 # ============================================================================
 # GLOBAL MANAGERS
@@ -131,6 +134,57 @@ async def initialize_managers() -> None:
     )
 
     logger.info("✅ All managers initialized successfully")
+
+
+async def run_startup_migrations() -> None:
+    """Apply Alembic migrations before service startup."""
+    if not AUTO_APPLY_MIGRATIONS:
+        logger.info("Skipping automatic migrations (AUTO_APPLY_MIGRATIONS=false).")
+        return
+
+    logger.info("🧱 Applying Alembic migrations...")
+
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        alembic_cmd = os.path.join(os.path.dirname(sys.executable), "alembic")
+        if not os.path.exists(alembic_cmd):
+            alembic_cmd = "alembic"
+
+        process = await asyncio.create_subprocess_exec(
+            alembic_cmd,
+            "-c",
+            "alembic.ini",
+            "upgrade",
+            "head",
+            cwd=backend_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "Alembic CLI is not installed in runtime environment. "
+            "Install backend dependencies first."
+        ) from exc
+
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(), timeout=MIGRATION_TIMEOUT_SEC
+        )
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
+        raise RuntimeError(
+            f"Alembic migration timed out after {MIGRATION_TIMEOUT_SEC}s"
+        )
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            "Alembic migration failed. "
+            f"stdout: {stdout.decode()[:600]} "
+            f"stderr: {stderr.decode()[:600]}"
+        )
+
+    logger.info("✅ Alembic migrations applied")
 
 
 async def initialize_scheduler() -> None:
@@ -256,6 +310,7 @@ async def lifespan(app: FastAPI):
     """Управление жизненным циклом приложения"""
     # Startup
     logger.info("🏁 Starting application...")
+    await run_startup_migrations()
     await initialize_managers()
     await initialize_scheduler()
     logger.info("✅ Application started successfully")

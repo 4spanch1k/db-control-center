@@ -98,6 +98,8 @@ services:
       # Environment
       ENV: ${ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AUTO_APPLY_MIGRATIONS: ${AUTO_APPLY_MIGRATIONS:-true}
+      MIGRATION_TIMEOUT_SEC: ${MIGRATION_TIMEOUT_SEC:-120}
     depends_on:
       metadata-postgres:
         condition: service_healthy

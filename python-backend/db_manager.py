@@ -6,7 +6,6 @@ PostgreSQL Database Manager
 import asyncio
 import logging
 from typing import Dict, Optional, Tuple
-from datetime import datetime
 
 import asyncpg
 from asyncpg.pool import Pool
@@ -51,74 +50,46 @@ class DatabaseManager:
                 command_timeout=60,
             )
             logger.info(f"Connected to PostgreSQL: {self.host}:{self.port}/{self.database}")
-            await self.init_tables()
+            await self.validate_schema()
         except Exception as e:
             logger.error(f"Failed to connect to PostgreSQL: {e}")
             raise
 
-    async def init_tables(self) -> None:
+    async def validate_schema(self) -> None:
+        """
+        Validate that database schema is already provisioned by Alembic.
+        Runtime table creation is intentionally disabled.
+        """
         conn = None
         try:
             conn = await self.get_connection()
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS connections (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    name VARCHAR(255) NOT NULL,
-                    db_type VARCHAR(50) NOT NULL,
-                    host VARCHAR(255) NOT NULL,
-                    port INTEGER NOT NULL,
-                    username VARCHAR(255) NOT NULL,
-                    encrypted_password TEXT NOT NULL,
-                    database_name VARCHAR(255),
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    last_check_status BOOLEAN,
-                    last_check_at TIMESTAMP
-                );
-                
-                CREATE TABLE IF NOT EXISTS users (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    hashed_password TEXT NOT NULL,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-                
-                CREATE TABLE IF NOT EXISTS backup_logs (
-                    id SERIAL PRIMARY KEY,
-                    action VARCHAR(50) NOT NULL,
-                    filename VARCHAR(255) NOT NULL,
-                    size_bytes BIGINT NOT NULL,
-                    status VARCHAR(50) NOT NULL,
-                    error_message TEXT,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
+            required_tables = {
+                "connections",
+                "users",
+                "backup_logs",
+                "analytics_stats",
+                "backup_deletion_logs",
+                "alembic_version",
+            }
+            rows = await conn.fetch(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                """
+            )
+            existing_tables = {row["table_name"] for row in rows}
+            missing_tables = sorted(required_tables - existing_tables)
 
-                CREATE TABLE IF NOT EXISTS analytics_stats (
-                    id BIGSERIAL PRIMARY KEY,
-                    "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    total_backups_size BIGINT NOT NULL DEFAULT 0,
-                    backups_count INTEGER NOT NULL DEFAULT 0,
-                    db_tables_count INTEGER NOT NULL DEFAULT 0,
-                    indexes_size BIGINT NOT NULL DEFAULT 0,
-                    active_connections INTEGER NOT NULL DEFAULT 0,
-                    db_size BIGINT DEFAULT 0,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
+            if missing_tables:
+                raise RuntimeError(
+                    "Database schema is not migrated. Missing tables: "
+                    f"{', '.join(missing_tables)}. Run `make migrate-up`."
+                )
 
-                CREATE TABLE IF NOT EXISTS backup_deletion_logs (
-                    id BIGSERIAL PRIMARY KEY,
-                    backup_key VARCHAR(500) NOT NULL,
-                    deleted_size BIGINT NOT NULL,
-                    deleted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    reason VARCHAR(255) DEFAULT NULL,
-                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
-            logger.info("Checked/created DB tables (connections, users, backup_logs, analytics_stats, backup_deletion_logs)")
+            logger.info("Database schema validation passed (Alembic-managed tables exist).")
         except Exception as e:
-            logger.error(f"Error initializing tables: {e}")
+            logger.error(f"Schema validation failed: {e}")
             raise
         finally:
             if conn:
@@ -467,6 +438,23 @@ class DatabaseManager:
             return str(user_id)
         except Exception as e:
             logger.error(f"Error creating user: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def update_user_password(self, email: str, hashed_password: str) -> bool:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            updated = await conn.execute(
+                "UPDATE users SET hashed_password = $1 WHERE email = $2",
+                hashed_password,
+                email,
+            )
+            return updated.endswith("1")
+        except Exception as e:
+            logger.error(f"Error updating user password: {e}")
             raise
         finally:
             if conn:
