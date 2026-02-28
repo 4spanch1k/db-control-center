@@ -151,7 +151,7 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION get_analytics_recent_30()
         RETURNS TABLE (
             id BIGINT,
-            timestamp TIMESTAMP WITH TIME ZONE,
+            "timestamp" TIMESTAMP WITH TIME ZONE,
             total_backups_size BIGINT,
             backups_count INTEGER,
             db_tables_count INTEGER,
@@ -183,7 +183,7 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION get_analytics_current()
         RETURNS TABLE (
             id BIGINT,
-            timestamp TIMESTAMP WITH TIME ZONE,
+            "timestamp" TIMESTAMP WITH TIME ZONE,
             total_backups_size BIGINT,
             backups_count INTEGER,
             db_tables_count INTEGER,

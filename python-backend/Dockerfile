@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
+
 # Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -11,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 
 # Копирование зависимостей
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 # Копирование приложения
 COPY . .
