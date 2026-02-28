@@ -134,13 +134,16 @@ RETURNS TABLE (
 BEGIN
     RETURN QUERY
     SELECT 
-        i.indexname::VARCHAR,
-        t.tablename::VARCHAR,
-        pg_relation_size(i.indexrelid)::BIGINT
-    FROM pg_indexes i
-    JOIN pg_tables t ON i.tablename = t.tablename
-    WHERE i.schemaname NOT IN ('pg_catalog', 'information_schema')
-    ORDER BY pg_relation_size(i.indexrelid) DESC;
+        i.relname::VARCHAR AS index_name,
+        t.relname::VARCHAR AS table_name,
+        pg_relation_size(i.oid)::BIGINT AS index_size_bytes
+    FROM pg_class i
+    JOIN pg_index ix ON ix.indexrelid = i.oid
+    JOIN pg_class t ON t.oid = ix.indrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE i.relkind = 'i'
+      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    ORDER BY pg_relation_size(i.oid) DESC;
 END;
 $$ LANGUAGE plpgsql;
 

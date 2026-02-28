@@ -10,8 +10,9 @@ import subprocess
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
+from app.core.auth_utils import get_current_user
 from pydantic import BaseModel
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -274,12 +275,27 @@ async def lifespan(app: FastAPI):
 # FASTAPI APP
 # ============================================================================
 
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.endpoints.connections import router as connections_router
+from app.api.endpoints.auth import router as auth_router
+
 app = FastAPI(
     title="DB Control Center Python Backend",
     description="Автоматизация бэкапов и аналитики",
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(connections_router, prefix="/api/connections", tags=["connections"])
+app.include_router(auth_router, prefix="/api", tags=["auth"])
 
 
 # ============================================================================
@@ -379,7 +395,7 @@ async def create_backup_job():
             os.remove(file_path)
 
 @app.post("/api/backup/create", response_model=BackupResponse)
-async def trigger_backup_create(background_tasks: BackgroundTasks) -> BackupResponse:
+async def trigger_backup_create(background_tasks: BackgroundTasks, _ = Depends(get_current_user)) -> BackupResponse:
     """Запуск создания бэкапа в фоне"""
     background_tasks.add_task(create_backup_job)
     return BackupResponse(success=True, message="Backup process started in background")
@@ -423,14 +439,14 @@ async def restore_backup_job(filename: str):
             os.remove(file_path)
 
 @app.post("/api/backup/restore", response_model=BackupResponse)
-async def trigger_backup_restore(request: RestoreRequest, background_tasks: BackgroundTasks) -> BackupResponse:
+async def trigger_backup_restore(request: RestoreRequest, background_tasks: BackgroundTasks, _ = Depends(get_current_user)) -> BackupResponse:
     """Запуск восстановления бэкапа в фоне"""
     background_tasks.add_task(restore_backup_job, request.filename)
     return BackupResponse(success=True, message=f"Restore process for {request.filename} started in background")
 
 
 @app.post("/api/trigger-cleanup", response_model=CleanupResponse)
-async def trigger_cleanup(background_tasks: BackgroundTasks) -> CleanupResponse:
+async def trigger_cleanup(_ = Depends(get_current_user)) -> CleanupResponse:
     """
     Принудительно запустить очистку старых бэкапов
     
@@ -478,7 +494,7 @@ async def trigger_cleanup(background_tasks: BackgroundTasks) -> CleanupResponse:
 
 
 @app.post("/api/trigger-analytics", response_model=AnalyticsResponse)
-async def trigger_analytics() -> AnalyticsResponse:
+async def trigger_analytics(_ = Depends(get_current_user)) -> AnalyticsResponse:
     """
     Принудительно собрать аналитику
     

@@ -73,7 +73,7 @@ db-control-center/
 │   ├── requirements.txt           # Python зависимости
 │   ├── Dockerfile                 # Python 3.11 контейнер
 │   └── __init__.py
-├── web-ui/                        # Next.js приложение
+├── frontend/                        # Next.js приложение
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── analytics/         # Страница дашборда
@@ -130,6 +130,20 @@ curl http://localhost:3000
 ```
 
 Подробнее: 📖 [DEPLOYMENT.md](DEPLOYMENT.md)
+
+## 🧭 Developer Workflow
+
+Единая точка входа для разработки:
+
+```bash
+make help
+make bootstrap
+make dev
+make lint
+make migrate-up
+```
+
+Подробности: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
 ## 📊 Функциональность Python Backend
 
@@ -191,7 +205,7 @@ POST http://localhost:3000/api/analytics/collect
 
 ### CSS Переменные
 
-Все цвета и размеры определены через CSS переменные в [variables.css](web-ui/src/app/variables.css):
+Все цвета и размеры определены через CSS переменные в [variables.css](frontend/src/app/variables.css):
 
 ```css
 --color-primary: #3b82f6;

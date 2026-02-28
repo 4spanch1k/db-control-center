@@ -65,7 +65,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 ### 3. Установка зависимостей
 
 ```bash
-cd web-ui
+cd frontend
 npm install
 ```
 
@@ -178,7 +178,7 @@ db-control-center/
 ├── n8n-workflows/
 │   ├── DATA_COLLECTION_WORKFLOW.md
 │   └── analytics-workflow.json
-├── web-ui/
+├── frontend/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── analytics/
@@ -214,7 +214,7 @@ db-control-center/
 
 ### CSS переменные
 
-Все цвета и размеры определены через CSS переменные в [variables.css](web-ui/src/app/variables.css):
+Все цвета и размеры определены через CSS переменные в [variables.css](frontend/src/app/variables.css):
 
 ```css
 /* Основные цвета */

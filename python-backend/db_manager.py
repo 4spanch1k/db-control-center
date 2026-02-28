@@ -10,6 +10,8 @@ from datetime import datetime
 
 import asyncpg
 from asyncpg.pool import Pool
+import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,6 @@ class DatabaseManager:
         self.pool: Optional[Pool] = None
 
     async def connect(self) -> None:
-        """Инициализация пула соединений"""
         try:
             self.pool = await asyncpg.create_pool(
                 host=self.host,
@@ -49,10 +50,79 @@ class DatabaseManager:
                 max_size=self.max_size,
                 command_timeout=60,
             )
-            logger.info(f"✅ Connected to PostgreSQL: {self.host}:{self.port}/{self.database}")
+            logger.info(f"Connected to PostgreSQL: {self.host}:{self.port}/{self.database}")
+            await self.init_tables()
         except Exception as e:
-            logger.error(f"❌ Failed to connect to PostgreSQL: {e}")
+            logger.error(f"Failed to connect to PostgreSQL: {e}")
             raise
+
+    async def init_tables(self) -> None:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS connections (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL,
+                    db_type VARCHAR(50) NOT NULL,
+                    host VARCHAR(255) NOT NULL,
+                    port INTEGER NOT NULL,
+                    username VARCHAR(255) NOT NULL,
+                    encrypted_password TEXT NOT NULL,
+                    database_name VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    last_check_status BOOLEAN,
+                    last_check_at TIMESTAMP
+                );
+                
+                CREATE TABLE IF NOT EXISTS users (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    hashed_password TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                
+                CREATE TABLE IF NOT EXISTS backup_logs (
+                    id SERIAL PRIMARY KEY,
+                    action VARCHAR(50) NOT NULL,
+                    filename VARCHAR(255) NOT NULL,
+                    size_bytes BIGINT NOT NULL,
+                    status VARCHAR(50) NOT NULL,
+                    error_message TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS analytics_stats (
+                    id BIGSERIAL PRIMARY KEY,
+                    "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    total_backups_size BIGINT NOT NULL DEFAULT 0,
+                    backups_count INTEGER NOT NULL DEFAULT 0,
+                    db_tables_count INTEGER NOT NULL DEFAULT 0,
+                    indexes_size BIGINT NOT NULL DEFAULT 0,
+                    active_connections INTEGER NOT NULL DEFAULT 0,
+                    db_size BIGINT DEFAULT 0,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS backup_deletion_logs (
+                    id BIGSERIAL PRIMARY KEY,
+                    backup_key VARCHAR(500) NOT NULL,
+                    deleted_size BIGINT NOT NULL,
+                    deleted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    reason VARCHAR(255) DEFAULT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            logger.info("Checked/created DB tables (connections, users, backup_logs, analytics_stats, backup_deletion_logs)")
+        except Exception as e:
+            logger.error(f"Error initializing tables: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
 
     async def close(self) -> None:
         """Закрытие пула соединений"""
@@ -60,11 +130,45 @@ class DatabaseManager:
             await self.pool.close()
             logger.info("✅ PostgreSQL connection pool closed")
 
-    async def get_connection(self):
+    async def get_connection(self) -> asyncpg.Connection:
         """Получить соединение из пула"""
         if not self.pool:
             raise RuntimeError("Database pool not initialized. Call connect() first.")
         return await self.pool.acquire()
+
+    async def health_check(self) -> bool:
+        """Проверка доступности БД"""
+        conn = None
+        try:
+            conn = await self.get_connection()
+            await conn.execute("SELECT 1")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Database health check failed: {e}")
+            return False
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def log_backup_action(self, action: str, filename: str, size_bytes: int, status: str, error_message: str = None) -> Optional[int]:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            record_id = await conn.fetchval(
+                """
+                INSERT INTO backup_logs (action, filename, size_bytes, status, error_message)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id
+                """,
+                action, filename, size_bytes, status, error_message
+            )
+            return record_id
+        except Exception as e:
+            logger.error(f"❌ Error logging backup action: {e}")
+            return None
+        finally:
+            if conn:
+                await self.pool.release(conn)
 
     async def get_database_stats(self) -> Dict[str, int]:
         """
@@ -150,10 +254,7 @@ class DatabaseManager:
             # The -O flag skips restoring object ownership
             # The -x flag skips restoring privileges/ACLs
             # The --clean flag drops database objects prior to recreating them
-            import asyncio
-            import os
-            import subprocess
-            
+            # The --clean flag drops database objects prior to recreating them
             process = await asyncio.create_subprocess_shell(
                 f"pg_restore -h {self.host} -p {self.port} -U {self.user} -d {self.database} -O -x --clean {filepath}",
                 env=dict(os.environ, PGPASSWORD=self.password),
@@ -179,8 +280,6 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"❌ Error during database restore: {e}")
             return False
-            if conn:
-                await self.pool.release(conn)
 
     async def insert_analytics_stats(
         self,
@@ -307,13 +406,68 @@ class DatabaseManager:
             if conn:
                 await self.pool.release(conn)
 
-    async def health_check(self) -> bool:
-        """Проверить здоровье подключения"""
+    async def save_connection(
+        self,
+        name: str,
+        db_type: str,
+        host: str,
+        port: int,
+        username: str,
+        encrypted_password: str,
+        database_name: str | None = None
+    ):
+        conn = None
         try:
             conn = await self.get_connection()
-            await conn.fetchval("SELECT 1")
-            await self.pool.release(conn)
-            return True
+            record_id = await conn.fetchval(
+                """
+                INSERT INTO connections (
+                    name, db_type, host, port, username, encrypted_password, database_name, last_check_status, last_check_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                RETURNING id
+                """,
+                name, db_type, host, port, username, encrypted_password, database_name, True
+            )
+            return record_id
         except Exception as e:
-            logger.error(f"❌ Database health check failed: {e}")
-            return False
+            logger.error(f"Error saving connection: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_user_by_email(self, email: str):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            user = await conn.fetchrow(
+                "SELECT id, email, hashed_password, is_active FROM users WHERE email = $1",
+                email
+            )
+            return dict(user) if user else None
+        except Exception as e:
+            logger.error(f"Error getting user: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def create_user(self, email: str, hashed_password: str):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            user_id = await conn.fetchval(
+                """
+                INSERT INTO users (email, hashed_password) 
+                VALUES ($1, $2) 
+                RETURNING id
+                """,
+                email, hashed_password
+            )
+            return str(user_id)
+        except Exception as e:
+            logger.error(f"Error creating user: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)

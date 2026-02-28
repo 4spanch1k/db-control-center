@@ -1,0 +1,259 @@
+/* ========================================
+   AnalyticsTable.module.css
+   Стили для таблицы аналитики
+   ======================================== */
+
+.container {
+  width: 100%;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableHead {
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-secondary) 0%,
+    var(--color-bg-tertiary) 100%
+  );
+  border-bottom: 2px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tableHeader {
+  padding: var(--space-md) var(--space-lg);
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+
+.tableHeaderSortable {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  transition: color var(--transition-fast);
+}
+
+.tableHeaderSortable:hover {
+  color: var(--color-text);
+}
+
+.sortIcon {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+}
+
+.tableBody {
+  background-color: var(--color-bg);
+}
+
+.tableRow {
+  border-bottom: 1px solid var(--color-border-light);
+  transition: all var(--transition-fast);
+}
+
+.tableRow:hover {
+  background-color: var(--color-bg-secondary);
+  cursor: pointer;
+}
+
+.tableRow.clickable:active {
+  background-color: var(--color-bg-tertiary);
+}
+
+.tableCell {
+  padding: var(--space-md) var(--space-lg);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.tableCellNumeric {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+}
+
+.tableCellTime {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Статус индикатор в таблице */
+.statusCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.statusDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.statusDotHealthy {
+  background-color: var(--color-success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.statusDotWarning {
+  background-color: var(--color-warning);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.statusDotCritical {
+  background-color: var(--color-danger);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.statusLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+/* Метрика в таблице */
+.metric {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.metricIcon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-lg);
+  flex-shrink: 0;
+}
+
+.metricContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.metricLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metricValue {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3xl);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--color-border);
+  text-align: center;
+}
+
+.emptyStateIcon {
+  font-size: 3rem;
+  margin-bottom: var(--space-md);
+  opacity: 0.5;
+}
+
+.emptyStateTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+.emptyStateText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  max-width: 300px;
+}
+
+/* Loading skeleton */
+.skeletonRow {
+  border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.skeletonCell {
+  margin-bottom: var(--space-sm);
+}
+
+.skeletonCell:last-child {
+  margin-bottom: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .tableHeader {
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-2xs);
+  }
+
+  .tableCell {
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-xs);
+  }
+
+  .tableCellNumeric {
+    font-size: var(--font-size-xs);
+  }
+
+  .metric {
+    gap: var(--space-xs);
+  }
+
+  .metricIcon {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: var(--font-size-base);
+  }
+
+  .metricLabel {
+    font-size: var(--font-size-2xs);
+  }
+
+  .metricValue {
+    font-size: var(--font-size-xs);
+  }
+
+  .tableHeaderSortable {
+    gap: 0;
+  }
+
+  .sortIcon {
+    display: none;
+  }
+}

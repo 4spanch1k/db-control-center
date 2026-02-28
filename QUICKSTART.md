@@ -19,7 +19,7 @@ psql -h localhost -U postgres -d control_center < sql/003_analytics_queries.sql
 cp .env.example .env.local
 
 # Отредактировать необходимые значения
-cat > web-ui/.env.local << EOF
+cat > frontend/.env.local << EOF
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=control_center
@@ -32,7 +32,7 @@ EOF
 ### Шаг 3: Установка зависимостей (1 мин)
 
 ```bash
-cd web-ui
+cd frontend
 npm install
 ```
 
@@ -184,7 +184,7 @@ SQL
 1. ✅ Git commit: `git add . && git commit -m "feat: add analytics dashboard"`
 2. 📝 Посмотрите [ARCHITECTURE.md](ARCHITECTURE.md) для углубленного понимания
 3. 🔄 Прочитайте [n8n-workflows/DATA_COLLECTION_WORKFLOW.md](n8n-workflows/DATA_COLLECTION_WORKFLOW.md)
-4. 🎨 Кастомизируйте CSS переменные в [web-ui/src/app/variables.css](web-ui/src/app/variables.css)
+4. 🎨 Кастомизируйте CSS переменные в [frontend/src/app/variables.css](frontend/src/app/variables.css)
 
 ### Для продакшена:
 
@@ -207,8 +207,8 @@ SQL
 ## 🎓 Учебные ресурсы
 
 - [SQL Functions](sql/003_analytics_queries.sql) - подробный разбор всех функций
-- [API Endpoints](web-ui/src/app/api/analytics/) - все endpoint'ы с комментариями
-- [React Components](web-ui/src/components/) - структура компонентов
+- [API Endpoints](frontend/src/app/api/analytics/) - все endpoint'ы с комментариями
+- [React Components](frontend/src/components/) - структура компонентов
 - [n8n Workflow](n8n-workflows/analytics-workflow.json) - JSON конфигурация
 
 ---
@@ -218,7 +218,7 @@ SQL
 1. **Дебага в DevTools**: открыть Network tab и смотреть запросы к API
 2. **Логи PostgreSQL**: `docker logs <postgres-container> | tail -100`
 3. **n8n логи**: откройте страницу workflow и нажмите кнопку "View Logs"
-4. **TypeScript проверка**: `cd web-ui && npx tsc --noEmit`
+4. **TypeScript проверка**: `cd frontend && npx tsc --noEmit`
 
 ---
 

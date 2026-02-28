@@ -1,0 +1,36 @@
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from app.core.security import encrypt_password
+from app.core.auth_utils import get_current_user
+from app.services.db_tester import test_postgresql_connection
+
+router = APIRouter()
+
+class ConnectionSchema(BaseModel):
+    name: str
+    db_type: str
+    host: str
+    port: int
+    username: str
+    password: str
+    database_name: str | None = None
+
+@router.post("/test")
+async def add_connection(config: ConnectionSchema, _ = Depends(get_current_user)):
+    is_ok, message = await test_postgresql_connection(
+        config.host, config.port, config.username, config.password, config.database_name
+    )
+    
+    if not is_ok:
+        raise HTTPException(status_code=400, detail=f"Database unreachable: {message}")
+
+    secure_pass = encrypt_password(config.password)
+    
+    # Import globals from main or use dependency injection.
+    import main
+    if getattr(main, "db_manager", None):
+        await main.db_manager.save_connection(
+            config.name, config.db_type, config.host, config.port, config.username, secure_pass, config.database_name
+        )
+    
+    return {"status": "success", "message": "Connection verified and saved"}
