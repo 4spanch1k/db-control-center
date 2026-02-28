@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildBackendHeaders } from '@/lib/backend-proxy';
+import { fetchBackendWithAutoRefresh } from '@/lib/backend-proxy';
+import { setAuthCookies } from '@/app/api/auth/cookies';
 
 /**
  * POST /api/analytics/collect
@@ -8,26 +9,35 @@ import { buildBackendHeaders } from '@/lib/backend-proxy';
  */
 export async function POST(request: NextRequest) {
   try {
-    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://python_backend:8000';
-
-    const response = await fetch(`${pythonBackendUrl}/api/trigger-analytics`, {
+    const { response, refreshedSession } = await fetchBackendWithAutoRefresh(
+      request,
+      '/api/trigger-analytics',
+      {
       method: 'POST',
-      headers: buildBackendHeaders(request),
-    });
+      }
+    );
 
     if (!response.ok) {
       const errorData = await response.json();
-      return NextResponse.json(
+      const errorResponse = NextResponse.json(
         {
           success: false,
           error: errorData.detail || 'Failed to trigger analytics',
         },
         { status: response.status }
       );
+      if (refreshedSession) {
+        setAuthCookies(errorResponse, request, refreshedSession);
+      }
+      return errorResponse;
     }
 
     const data = await response.json();
-    return NextResponse.json(data, { status: 200 });
+    const successResponse = NextResponse.json(data, { status: 200 });
+    if (refreshedSession) {
+      setAuthCookies(successResponse, request, refreshedSession);
+    }
+    return successResponse;
   } catch (error) {
     console.error('Error triggering analytics:', error);
     return NextResponse.json(

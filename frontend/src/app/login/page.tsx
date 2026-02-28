@@ -32,7 +32,13 @@ export default function LoginPage() {
                 throw new Error(data.detail || "Неверный email или пароль");
             }
 
-            router.push("/");
+            const nextPath = typeof window !== "undefined"
+                ? new URLSearchParams(window.location.search).get("next")
+                : null;
+            const safeNextPath = nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")
+                ? nextPath
+                : "/";
+            router.push(safeNextPath);
             router.refresh();
 
         } catch (err: unknown) {

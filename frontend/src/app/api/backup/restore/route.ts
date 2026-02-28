@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildBackendHeaders } from '@/lib/backend-proxy';
+import { fetchBackendWithAutoRefresh } from '@/lib/backend-proxy';
+import { setAuthCookies } from '@/app/api/auth/cookies';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,21 +14,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://python_backend:8000';
-
-    const response = await fetch(`${pythonBackendUrl}/api/backup/restore`, {
-      method: 'POST',
-      headers: buildBackendHeaders(request),
-      body: JSON.stringify({ filename }),
-    });
+    const { response, refreshedSession } = await fetchBackendWithAutoRefresh(
+      request,
+      '/api/backup/restore',
+      {
+        method: 'POST',
+        body: JSON.stringify({ filename }),
+      }
+    );
 
     if (!response.ok) {
       const errorData = await response.text();
-      throw new Error(`Ошибка запуска восстановления в Python Backend: ${errorData}`);
+      const errorResponse = NextResponse.json(
+        { success: false, error: `Ошибка запуска восстановления в Python Backend: ${errorData}` },
+        { status: response.status }
+      );
+      if (refreshedSession) {
+        setAuthCookies(errorResponse, request, refreshedSession);
+      }
+      return errorResponse;
     }
 
     const data = await response.json();
-    return NextResponse.json({ success: true, data });
+    const successResponse = NextResponse.json({ success: true, data });
+    if (refreshedSession) {
+      setAuthCookies(successResponse, request, refreshedSession);
+    }
+    return successResponse;
   } catch (error) {
     console.error('Ошибка API восстановления:', error);
     return NextResponse.json(

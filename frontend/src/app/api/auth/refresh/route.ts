@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCookieConfig } from '../cookies';
+import { setAuthCookies } from '../cookies';
 
 
 export async function POST(request: NextRequest) {
@@ -32,17 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const res = NextResponse.json({ success: true });
-    const cookieConfig = getCookieConfig(request);
-
-    res.cookies.set('access_token', payload.access_token, {
-      ...cookieConfig,
-      maxAge: payload.access_token_expires_in,
-    });
-
-    res.cookies.set('refresh_token', payload.refresh_token, {
-      ...cookieConfig,
-      maxAge: payload.refresh_token_expires_in,
-    });
+    setAuthCookies(res, request, payload);
 
     return res;
   } catch (error) {

@@ -1,22 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildBackendHeaders } from '@/lib/backend-proxy';
+import { fetchBackendWithAutoRefresh } from '@/lib/backend-proxy';
+import { setAuthCookies } from '@/app/api/auth/cookies';
 
 export async function POST(request: NextRequest) {
   try {
-    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://python_backend:8000';
-    const response = await fetch(`${pythonBackendUrl}/api/backup/create`, {
+    const { response, refreshedSession } = await fetchBackendWithAutoRefresh(
+      request,
+      '/api/backup/create',
+      {
       method: 'POST',
-      headers: buildBackendHeaders(request),
-    });
+      }
+    );
 
     if (!response.ok) {
       const errorData = await response.text();
-      throw new Error(`Ошибка запуска бэкапа в Python Backend: ${errorData}`);
+      const errorResponse = NextResponse.json(
+        { success: false, error: `Ошибка запуска бэкапа в Python Backend: ${errorData}` },
+        { status: response.status }
+      );
+      if (refreshedSession) {
+        setAuthCookies(errorResponse, request, refreshedSession);
+      }
+      return errorResponse;
     }
 
     const data = await response.json();
-
-    return NextResponse.json({ success: true, data });
+    const successResponse = NextResponse.json({ success: true, data });
+    if (refreshedSession) {
+      setAuthCookies(successResponse, request, refreshedSession);
+    }
+    return successResponse;
   } catch (error) {
     console.error('Ошибка API:', error);
     return NextResponse.json(

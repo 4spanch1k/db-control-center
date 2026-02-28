@@ -1,34 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildBackendHeaders } from '@/lib/backend-proxy';
+import { fetchBackendWithAutoRefresh } from '@/lib/backend-proxy';
+import { setAuthCookies } from '@/app/api/auth/cookies';
 
 export async function POST(request: NextRequest) {
   try {
-    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://python_backend:8000';
-
-    const response = await fetch(`${pythonBackendUrl}/api/trigger-cleanup`, {
+    const { response, refreshedSession } = await fetchBackendWithAutoRefresh(
+      request,
+      '/api/trigger-cleanup',
+      {
       method: 'POST',
-      headers: buildBackendHeaders(request),
-    });
+      }
+    );
 
     const payload = await response.json();
 
     if (!response.ok) {
-      return NextResponse.json(
+      const errorResponse = NextResponse.json(
         {
           success: false,
           message: payload?.detail || 'Ошибка при запуске очистки',
         },
         { status: response.status }
       );
+      if (refreshedSession) {
+        setAuthCookies(errorResponse, request, refreshedSession);
+      }
+      return errorResponse;
     }
 
-    return NextResponse.json(
+    const successResponse = NextResponse.json(
       {
         success: true,
         message: payload?.message || '✅ Очистка запущена! Отчёт придёт в Telegram',
       },
       { status: 200 }
     );
+    if (refreshedSession) {
+      setAuthCookies(successResponse, request, refreshedSession);
+    }
+    return successResponse;
   } catch (error) {
     console.error('Cleanup error:', error);
     return NextResponse.json(

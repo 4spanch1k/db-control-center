@@ -6,6 +6,13 @@ const AUTH_COOKIE_DOMAIN = process.env.AUTH_COOKIE_DOMAIN || undefined;
 
 type SameSite = 'lax' | 'strict' | 'none';
 
+export interface AuthTokenPayload {
+  access_token: string;
+  refresh_token: string;
+  access_token_expires_in: number;
+  refresh_token_expires_in: number;
+}
+
 function parseBoolean(raw: string | undefined): boolean | undefined {
   if (raw === undefined) {
     return undefined;
@@ -50,6 +57,24 @@ export function getCookieConfig(request: NextRequest) {
     path: '/',
     domain: AUTH_COOKIE_DOMAIN,
   } as const;
+}
+
+export function setAuthCookies(
+  response: NextResponse,
+  request: NextRequest,
+  tokens: AuthTokenPayload
+) {
+  const cookieConfig = getCookieConfig(request);
+
+  response.cookies.set('access_token', tokens.access_token, {
+    ...cookieConfig,
+    maxAge: tokens.access_token_expires_in,
+  });
+
+  response.cookies.set('refresh_token', tokens.refresh_token, {
+    ...cookieConfig,
+    maxAge: tokens.refresh_token_expires_in,
+  });
 }
 
 export function clearAuthCookies(response: NextResponse, request: NextRequest) {
