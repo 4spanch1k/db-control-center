@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PAGE_PATHS = new Set(['/login']);
-const PUBLIC_API_PREFIXES = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
+const PUBLIC_PAGE_PATHS = new Set(['/', '/login', '/register']);
+const PUBLIC_API_PREFIXES = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'];
+const PRIVATE_PAGE_PREFIXES = ['/dashboard', '/analytics', '/settings'];
 
 function hasSession(request: NextRequest): boolean {
   const accessToken = request.cookies.get('access_token')?.value;
@@ -15,6 +16,10 @@ function isPublicApi(pathname: string): boolean {
 
 function isPublicPage(pathname: string): boolean {
   return PUBLIC_PAGE_PATHS.has(pathname);
+}
+
+function isPrivatePage(pathname: string): boolean {
+  return PRIVATE_PAGE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export function proxy(request: NextRequest) {
@@ -37,13 +42,13 @@ export function proxy(request: NextRequest) {
   }
 
   if (isPublicPage(pathname)) {
-    if (authenticated) {
-      return NextResponse.redirect(new URL('/', request.url));
+    if (authenticated && (pathname === '/login' || pathname === '/register')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();
   }
 
-  if (!authenticated) {
+  if (isPrivatePage(pathname) && !authenticated) {
     const nextParam = `${pathname}${search}`;
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', nextParam);

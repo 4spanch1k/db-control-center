@@ -10,6 +10,7 @@ from app.core.auth_utils import (
     decode_refresh_token,
     get_access_token_ttl_seconds,
     get_refresh_token_ttl_seconds,
+    hash_password,
     verify_password,
 )
 
@@ -51,6 +52,11 @@ class LoginSchema(BaseModel):
     password: str
 
 
+class RegisterSchema(BaseModel):
+    email: str
+    password: str
+
+
 class TokenResponse(BaseModel):
     success: bool
     token_type: str
@@ -76,6 +82,51 @@ async def login(credentials: LoginSchema, response: Response):
 
     access_token = create_access_token(data={"sub": user["email"]})
     refresh_token = create_refresh_token(data={"sub": user["email"]})
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    return TokenResponse(
+        success=True,
+        token_type="bearer",
+        access_token=access_token,
+        refresh_token=refresh_token,
+        access_token_expires_in=get_access_token_ttl_seconds(),
+        refresh_token_expires_in=get_refresh_token_ttl_seconds(),
+    )
+
+
+@router.post("/auth/register", response_model=TokenResponse)
+async def register(payload: RegisterSchema, response: Response):
+    import main
+
+    if not getattr(main, "db_manager", None):
+        raise HTTPException(status_code=500, detail="Database manager not initialized")
+
+    email = payload.email.strip().lower()
+    if "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Неверный формат email")
+
+    if len(payload.password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль должен содержать минимум 8 символов",
+        )
+
+    existing_user = await main.db_manager.get_user_by_email(email)
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Пользователь с таким email уже существует")
+
+    try:
+        await main.db_manager.create_user(email, hash_password(payload.password))
+    except Exception as exc:
+        if "duplicate key value violates unique constraint" in str(exc).lower():
+            raise HTTPException(
+                status_code=409,
+                detail="Пользователь с таким email уже существует",
+            ) from exc
+        raise HTTPException(status_code=500, detail="Не удалось создать пользователя") from exc
+
+    access_token = create_access_token(data={"sub": email})
+    refresh_token = create_refresh_token(data={"sub": email})
     _set_auth_cookies(response, access_token, refresh_token)
 
     return TokenResponse(

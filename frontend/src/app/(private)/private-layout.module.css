@@ -1,0 +1,24 @@
+.shell {
+  display: flex;
+  min-height: 100dvh;
+  background: var(--color-bg);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+  animation: page-enter 420ms var(--transition-ease-out) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

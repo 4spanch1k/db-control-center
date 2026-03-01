@@ -140,12 +140,14 @@ make help
 make bootstrap
 make dev
 make lint
+make verify
 make test
 make migrate-up
 make seed-admin ADMIN_PASSWORD="change_me"
 ```
 
 `make bootstrap` создаёт локальное Python-окружение `.venv` и устанавливает backend зависимости туда.
+`make verify` выполняет полный цикл проверки: `lint + backend-tests + frontend-build` (`make test` — алиас).
 
 Подробности: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 

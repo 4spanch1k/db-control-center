@@ -1,0 +1,134 @@
+.container {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 86% 14%, rgba(6, 182, 212, 0.16), transparent 34%),
+    radial-gradient(circle at 12% 82%, rgba(244, 63, 94, 0.14), transparent 32%),
+    var(--color-bg);
+}
+
+.card {
+  width: min(520px, 100%);
+  border-radius: 20px;
+  padding: 30px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-secondary) 88%, #ffffff 12%);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.2);
+  animation: enter 450ms var(--transition-ease-out) both;
+}
+
+.badge {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  letter-spacing: 0.2em;
+  font-size: 0.72rem;
+}
+
+.title {
+  margin-top: 8px;
+  font-size: 1.8rem;
+}
+
+.description {
+  margin-top: 14px;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+.form {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  color: color-mix(in srgb, var(--color-text) 82%, transparent);
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: 0.72rem 0.9rem;
+  font-size: 0.95rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-text) 78%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-text) 34%, transparent);
+}
+
+.error {
+  margin-top: 6px;
+  color: var(--color-danger);
+  font-size: 0.84rem;
+}
+
+.actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primary {
+  margin-top: 8px;
+  width: 100%;
+  border-radius: 999px;
+  padding: 0.76rem 1.2rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  background: var(--color-text);
+  color: var(--color-bg);
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 150ms ease;
+}
+
+.primary:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.primary:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.link {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  transition: color 150ms ease;
+}
+
+.link:hover {
+  color: var(--color-text);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

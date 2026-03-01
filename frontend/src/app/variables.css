@@ -93,6 +93,8 @@
   --space-3xl: var(--space-16);
 
   /* Размеры шрифтов (71-80) */
+  --font-base: 'Manrope', 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;

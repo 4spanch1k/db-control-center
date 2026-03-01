@@ -11,7 +11,7 @@ BACKEND_PY := $(VENV_BIN)/python
 ALEMBIC := $(VENV_BIN)/alembic
 UVICORN := $(VENV_BIN)/uvicorn
 
-.PHONY: help bootstrap dev down logs lint test frontend-install frontend-dev backend-install backend-dev migrate-up migrate-down migrate-current migrate-create seed-admin backend-tests
+.PHONY: help bootstrap dev down logs lint test verify frontend-build frontend-install frontend-dev backend-install backend-dev migrate-up migrate-down migrate-current migrate-create seed-admin backend-tests
 
 help:
 	@echo "Available commands:"
@@ -20,6 +20,8 @@ help:
 	@echo "  make down             # Stop Docker Compose services"
 	@echo "  make logs             # Tail Docker Compose logs"
 	@echo "  make lint             # Run frontend lint + backend syntax check"
+	@echo "  make frontend-build   # Build Next.js frontend (webpack)"
+	@echo "  make verify           # lint + backend tests + frontend build"
 	@echo "  make frontend-dev     # Run Next.js dev server"
 	@echo "  make backend-dev      # Run FastAPI dev server"
 	@echo "  make migrate-up       # Apply Alembic migrations"
@@ -52,11 +54,15 @@ lint:
 	cd $(FRONTEND_DIR) && npm run lint
 	$(PYTHON) -m compileall $(BACKEND_DIR)
 
-test: lint
-	$(PYTHON) -m unittest discover -s $(BACKEND_DIR)/tests -p "test_*.py" -v
+verify: lint backend-tests frontend-build
+
+test: verify
 
 backend-tests:
 	$(PYTHON) -m unittest discover -s $(BACKEND_DIR)/tests -p "test_*.py" -v
+
+frontend-build:
+	cd $(FRONTEND_DIR) && npm run build
 
 frontend-dev:
 	cd $(FRONTEND_DIR) && npm run dev

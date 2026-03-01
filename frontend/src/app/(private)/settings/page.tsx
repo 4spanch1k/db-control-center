@@ -1,5 +1,5 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card/Card";
-import styles from "../page.module.css";
+import styles from "@/app/(private)/dashboard/dashboard.module.css";
 
 export const metadata = {
     title: "Настройки | DB Control Center",

@@ -58,6 +58,8 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
       - name: Checkout
@@ -75,3 +77,6 @@ jobs:
 
       - name: Lint frontend
         run: cd frontend && npm run lint
+
+      - name: Build frontend
+        run: cd frontend && npm run build

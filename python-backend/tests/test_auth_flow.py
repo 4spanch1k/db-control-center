@@ -20,20 +20,32 @@ class AuthFlowTests(unittest.TestCase):
     def setUp(self):
         self._original_db = backend_main.db_manager
 
-        self.user = {
-            "id": "test-id",
-            "email": "admin@example.com",
-            "hashed_password": hash_password("StrongPass123!"),
-            "is_active": True,
+        self.users = {
+            "admin@example.com": {
+                "id": "test-id",
+                "email": "admin@example.com",
+                "hashed_password": hash_password("StrongPass123!"),
+                "is_active": True,
+            }
         }
 
         async def _get_user_by_email(email: str):
-            if email == self.user["email"]:
-                return self.user
-            return None
+            return self.users.get(email)
+
+        async def _create_user(email: str, hashed_password: str):
+            if email in self.users:
+                raise Exception("duplicate key value violates unique constraint")
+            self.users[email] = {
+                "id": "new-id",
+                "email": email,
+                "hashed_password": hashed_password,
+                "is_active": True,
+            }
+            return "new-id"
 
         self.db_manager = SimpleNamespace(
             get_user_by_email=AsyncMock(side_effect=_get_user_by_email),
+            create_user=AsyncMock(side_effect=_create_user),
         )
 
         backend_main.db_manager = self.db_manager
@@ -95,6 +107,34 @@ class AuthFlowTests(unittest.TestCase):
         response = client.post("/api/auth/refresh")
         self.assertEqual(response.status_code, 401)
 
+    def test_register_creates_user_and_sets_auth_cookies(self):
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": "new@example.com", "password": "StrongPass123!"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertIn("new@example.com", self.users)
+        self.assertIn("access_token", response.cookies)
+        self.assertIn("refresh_token", response.cookies)
+
+    def test_register_existing_email_returns_409(self):
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": "admin@example.com", "password": "StrongPass123!"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_register_short_password_returns_400(self):
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": "new@example.com", "password": "1234567"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_logout_clears_cookies(self):
         self.client.post(
             "/api/auth/login",
@@ -107,12 +147,12 @@ class AuthFlowTests(unittest.TestCase):
         self.assertIn("Max-Age=0", response.headers.get("set-cookie", ""))
 
     def test_protected_endpoint_accepts_access_token_cookie(self):
-        access_token = create_access_token({"sub": self.user["email"]})
+        access_token = create_access_token({"sub": "admin@example.com"})
         self.client.cookies.set("access_token", access_token)
 
         response = self.client.get("/protected")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["email"], self.user["email"])
+        self.assertEqual(response.json()["email"], "admin@example.com")
 
 
 if __name__ == "__main__":

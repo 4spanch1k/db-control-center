@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -37,7 +38,7 @@ export default function LoginPage() {
                 : null;
             const safeNextPath = nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")
                 ? nextPath
-                : "/";
+                : "/dashboard";
             router.push(safeNextPath);
             router.refresh();
 
@@ -52,8 +53,9 @@ export default function LoginPage() {
     return (
         <div className={styles.container}>
             <div className={styles.card}>
+                <p className={styles.badge}>AUTH</p>
                 <div className={styles.header}>
-                    <h1>DB Control Center</h1>
+                    <h1 className={styles.title}>DB Control Center</h1>
                     <p>Вход в панель управления инфраструктурой</p>
                 </div>
 
@@ -90,6 +92,15 @@ export default function LoginPage() {
                         {isLoading ? "Подключение..." : "Войти в систему"}
                     </button>
                 </form>
+
+                <div className={styles.footer}>
+                    <Link href="/" className={styles.link}>
+                        Вернуться на главную
+                    </Link>
+                    <Link href="/register" className={styles.link}>
+                        Регистрация
+                    </Link>
+                </div>
             </div>
         </div>
     );

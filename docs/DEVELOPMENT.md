@@ -15,7 +15,10 @@ make dev            # docker compose up -d --build
 make logs           # tail logs
 make down           # stop containers
 make lint           # eslint + python syntax compile check
-make test           # includes backend integration tests
+make backend-tests  # backend integration tests only
+make frontend-build # production build smoke check (Next.js webpack)
+make verify         # full check: lint + backend-tests + frontend-build
+make test           # alias for make verify
 ```
 
 ## Backend migrations (Alembic)
@@ -37,4 +40,4 @@ make seed-admin ADMIN_PASSWORD="change_me" ADMIN_EMAIL="admin@example.com"
 ## CI
 
 - GitHub Actions workflow: `.github/workflows/ci.yml`
-- Runs backend syntax checks, backend integration tests, migration checks and frontend lint on push/PR.
+- Runs backend syntax checks, backend integration tests, migration checks, frontend lint and frontend production build on push/PR.
