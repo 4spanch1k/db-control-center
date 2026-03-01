@@ -11,9 +11,9 @@ import sys
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
-from app.core.auth_utils import get_current_user
+from app.core.auth_utils import ROLE_ADMIN, ROLE_OPERATOR, get_current_user, require_roles
 from pydantic import BaseModel
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -95,6 +95,23 @@ class AnalyticsResponse(BaseModel):
     success: bool
     record_id: int = None
     message: str
+
+
+class AuditLogEntry(BaseModel):
+    id: int
+    user_email: str
+    user_role: str
+    action: str
+    resource: str
+    status: str
+    details: str | None = None
+    created_at: datetime
+
+
+class AuditLogsResponse(BaseModel):
+    success: bool
+    count: int
+    data: list[AuditLogEntry]
 
 
 # ============================================================================
@@ -215,6 +232,29 @@ async def initialize_scheduler() -> None:
 
     scheduler.start()
     logger.info("✅ Scheduler started with 2 jobs")
+
+
+async def write_audit_log(
+    user: dict,
+    action: str,
+    resource: str,
+    status: str,
+    details: str | None = None,
+) -> None:
+    """Best-effort audit log writer."""
+    try:
+        if not db_manager:
+            return
+        await db_manager.log_audit_action(
+            user_email=user.get("email", "unknown"),
+            user_role=user.get("role", "viewer"),
+            action=action,
+            resource=resource,
+            status=status,
+            details=details,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to write audit log ({action}): {exc}")
 
 
 # ============================================================================
@@ -450,9 +490,18 @@ async def create_backup_job():
             os.remove(file_path)
 
 @app.post("/api/backup/create", response_model=BackupResponse)
-async def trigger_backup_create(background_tasks: BackgroundTasks, _ = Depends(get_current_user)) -> BackupResponse:
+async def trigger_backup_create(
+    background_tasks: BackgroundTasks,
+    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+) -> BackupResponse:
     """Запуск создания бэкапа в фоне"""
     background_tasks.add_task(create_backup_job)
+    await write_audit_log(
+        user=current_user,
+        action="backup.create",
+        resource="control_center",
+        status="accepted",
+    )
     return BackupResponse(success=True, message="Backup process started in background")
 
 class RestoreRequest(BaseModel):
@@ -494,14 +543,24 @@ async def restore_backup_job(filename: str):
             os.remove(file_path)
 
 @app.post("/api/backup/restore", response_model=BackupResponse)
-async def trigger_backup_restore(request: RestoreRequest, background_tasks: BackgroundTasks, _ = Depends(get_current_user)) -> BackupResponse:
+async def trigger_backup_restore(
+    request: RestoreRequest,
+    background_tasks: BackgroundTasks,
+    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+) -> BackupResponse:
     """Запуск восстановления бэкапа в фоне"""
     background_tasks.add_task(restore_backup_job, request.filename)
+    await write_audit_log(
+        user=current_user,
+        action="backup.restore",
+        resource=request.filename,
+        status="accepted",
+    )
     return BackupResponse(success=True, message=f"Restore process for {request.filename} started in background")
 
 
 @app.post("/api/trigger-cleanup", response_model=CleanupResponse)
-async def trigger_cleanup(_ = Depends(get_current_user)) -> CleanupResponse:
+async def trigger_cleanup(current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR))) -> CleanupResponse:
     """
     Принудительно запустить очистку старых бэкапов
     
@@ -533,6 +592,14 @@ async def trigger_cleanup(_ = Depends(get_current_user)) -> CleanupResponse:
             details="Manual cleanup",
         )
 
+        await write_audit_log(
+            user=current_user,
+            action="backup.cleanup",
+            resource="backups",
+            status="success" if error_count == 0 else "partial",
+            details=f"deleted={deleted_count}, errors={error_count}, freed={total_size}",
+        )
+
         return CleanupResponse(
             success=error_count == 0,
             deleted_files=deleted_count,
@@ -545,11 +612,20 @@ async def trigger_cleanup(_ = Depends(get_current_user)) -> CleanupResponse:
     except Exception as e:
         logger.error(f"❌ Cleanup failed: {e}")
         await telegram_alerter.send_error_alert("Manual Cleanup", str(e))
+        await write_audit_log(
+            user=current_user,
+            action="backup.cleanup",
+            resource="backups",
+            status="error",
+            details=str(e),
+        )
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
 
 @app.post("/api/trigger-analytics", response_model=AnalyticsResponse)
-async def trigger_analytics(_ = Depends(get_current_user)) -> AnalyticsResponse:
+async def trigger_analytics(
+    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+) -> AnalyticsResponse:
     """
     Принудительно собрать аналитику
     
@@ -574,6 +650,14 @@ async def trigger_analytics(_ = Depends(get_current_user)) -> AnalyticsResponse:
             db_size=db_stats["db_size"],
         )
 
+        await write_audit_log(
+            user=current_user,
+            action="analytics.collect_manual",
+            resource="analytics_stats",
+            status="success",
+            details=f"record_id={record_id}",
+        )
+
         return AnalyticsResponse(
             success=True,
             record_id=record_id,
@@ -582,7 +666,23 @@ async def trigger_analytics(_ = Depends(get_current_user)) -> AnalyticsResponse:
 
     except Exception as e:
         logger.error(f"❌ Analytics collection failed: {e}")
+        await write_audit_log(
+            user=current_user,
+            action="analytics.collect_manual",
+            resource="analytics_stats",
+            status="error",
+            details=str(e),
+        )
         raise HTTPException(status_code=500, detail=f"Analytics failed: {str(e)}")
+
+
+@app.get("/api/audit/logs", response_model=AuditLogsResponse)
+async def get_audit_logs(
+    limit: int = Query(default=100, ge=1, le=500),
+    _=Depends(require_roles(ROLE_ADMIN)),
+) -> AuditLogsResponse:
+    rows = await db_manager.get_recent_audit_logs(limit=limit)
+    return AuditLogsResponse(success=True, count=len(rows), data=rows)
 
 
 # ============================================================================
@@ -601,6 +701,7 @@ async def root():
             "health": "/health",
             "trigger_cleanup": "POST /api/trigger-cleanup",
             "trigger_analytics": "POST /api/trigger-analytics",
+            "audit_logs": "GET /api/audit/logs",
             "docs": "/docs",
         },
     }

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Callable, Optional
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request, status
@@ -17,6 +17,10 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 ACCESS_TOKEN_TYPE = "access"
 REFRESH_TOKEN_TYPE = "refresh"
+ROLE_ADMIN = "admin"
+ROLE_OPERATOR = "operator"
+ROLE_VIEWER = "viewer"
+ALLOWED_ROLES = {ROLE_ADMIN, ROLE_OPERATOR, ROLE_VIEWER}
 
 
 def hash_password(password: str) -> str:
@@ -119,4 +123,24 @@ async def get_current_user(
 
     if user is None:
         raise credentials_exception
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=403, detail="Пользователь деактивирован")
+
+    role = user.get("role")
+    user["role"] = role if role in ALLOWED_ROLES else ROLE_VIEWER
     return user
+
+
+def require_roles(*allowed_roles: str) -> Callable:
+    normalized_roles = {role.lower() for role in allowed_roles}
+
+    async def _role_guard(current_user=Depends(get_current_user)):
+        user_role = str(current_user.get("role", ROLE_VIEWER)).lower()
+        if user_role not in normalized_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для выполнения операции",
+            )
+        return current_user
+
+    return _role_guard

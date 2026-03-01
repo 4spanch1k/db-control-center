@@ -1,15 +1,18 @@
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from app.core.auth_utils import (
+    ALLOWED_ROLES,
+    ROLE_VIEWER,
     create_access_token,
     create_refresh_token,
     decode_refresh_token,
     get_access_token_ttl_seconds,
     get_refresh_token_ttl_seconds,
+    get_current_user,
     hash_password,
     verify_password,
 )
@@ -66,6 +69,11 @@ class TokenResponse(BaseModel):
     refresh_token_expires_in: int
 
 
+class UserProfileResponse(BaseModel):
+    success: bool
+    user: dict
+
+
 @router.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: LoginSchema, response: Response):
     import main
@@ -116,7 +124,11 @@ async def register(payload: RegisterSchema, response: Response):
         raise HTTPException(status_code=409, detail="Пользователь с таким email уже существует")
 
     try:
-        await main.db_manager.create_user(email, hash_password(payload.password))
+        await main.db_manager.create_user(
+            email,
+            hash_password(payload.password),
+            role=ROLE_VIEWER,
+        )
     except Exception as exc:
         if "duplicate key value violates unique constraint" in str(exc).lower():
             raise HTTPException(
@@ -182,3 +194,18 @@ async def logout(response: Response):
     response.delete_cookie(ACCESS_COOKIE_NAME, **cookie_params)
     response.delete_cookie(REFRESH_COOKIE_NAME, **cookie_params)
     return {"success": True, "message": "Logged out"}
+
+
+@router.get("/auth/me", response_model=UserProfileResponse)
+async def me(current_user=Depends(get_current_user)):
+    role = str(current_user.get("role", ROLE_VIEWER)).lower()
+    normalized_role = role if role in ALLOWED_ROLES else ROLE_VIEWER
+    return {
+        "success": True,
+        "user": {
+            "id": str(current_user["id"]),
+            "email": current_user["email"],
+            "is_active": bool(current_user.get("is_active", True)),
+            "role": normalized_role,
+        },
+    }

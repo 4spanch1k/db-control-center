@@ -27,6 +27,12 @@
   cursor: not-allowed;
 }
 
+.disabledHint {
+  margin-top: 8px;
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+}
+
 .cleanupMessage {
   margin-top: 20px;
   padding: 12px 14px;

@@ -69,6 +69,7 @@ class DatabaseManager:
                 "backup_logs",
                 "analytics_stats",
                 "backup_deletion_logs",
+                "audit_logs",
                 "alembic_version",
             }
             rows = await conn.fetch(
@@ -412,7 +413,7 @@ class DatabaseManager:
         try:
             conn = await self.get_connection()
             user = await conn.fetchrow(
-                "SELECT id, email, hashed_password, is_active FROM users WHERE email = $1",
+                "SELECT id, email, hashed_password, is_active, role FROM users WHERE email = $1",
                 email
             )
             return dict(user) if user else None
@@ -423,17 +424,17 @@ class DatabaseManager:
             if conn:
                 await self.pool.release(conn)
 
-    async def create_user(self, email: str, hashed_password: str):
+    async def create_user(self, email: str, hashed_password: str, role: str = "viewer"):
         conn = None
         try:
             conn = await self.get_connection()
             user_id = await conn.fetchval(
                 """
-                INSERT INTO users (email, hashed_password) 
-                VALUES ($1, $2) 
+                INSERT INTO users (email, hashed_password, role) 
+                VALUES ($1, $2, $3) 
                 RETURNING id
                 """,
-                email, hashed_password
+                email, hashed_password, role
             )
             return str(user_id)
         except Exception as e:
@@ -455,6 +456,85 @@ class DatabaseManager:
             return updated.endswith("1")
         except Exception as e:
             logger.error(f"Error updating user password: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def update_user_role(self, email: str, role: str) -> bool:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            updated = await conn.execute(
+                "UPDATE users SET role = $1 WHERE email = $2",
+                role,
+                email,
+            )
+            return updated.endswith("1")
+        except Exception as e:
+            logger.error(f"Error updating user role: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def log_audit_action(
+        self,
+        user_email: str,
+        user_role: str,
+        action: str,
+        resource: str,
+        status: str,
+        details: str | None = None,
+    ) -> Optional[int]:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            record_id = await conn.fetchval(
+                """
+                INSERT INTO audit_logs (user_email, user_role, action, resource, status, details)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id
+                """,
+                user_email,
+                user_role,
+                action,
+                resource,
+                status,
+                details,
+            )
+            return record_id
+        except Exception as e:
+            logger.error(f"Error writing audit log: {e}")
+            return None
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_recent_audit_logs(self, limit: int = 100):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id,
+                    user_email,
+                    user_role,
+                    action,
+                    resource,
+                    status,
+                    details,
+                    created_at
+                FROM audit_logs
+                ORDER BY created_at DESC
+                LIMIT $1
+                """,
+                max(1, min(limit, 500)),
+            )
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error reading audit logs: {e}")
             raise
         finally:
             if conn:

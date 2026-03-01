@@ -35,6 +35,16 @@
   margin-bottom: 20px;
 }
 
+.permissionHint {
+  margin: 0 0 16px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, #ffffff 20%);
+  background: color-mix(in srgb, var(--color-bg-secondary) 90%, #ffffff 10%);
+}
+
 .buttonGroup {
   display: flex;
   gap: 12px;
@@ -60,6 +70,11 @@
 
 .button:active {
   transform: scale(0.985);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .status {

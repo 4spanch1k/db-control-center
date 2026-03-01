@@ -13,7 +13,14 @@ if str(BACKEND_DIR) not in sys.path:
 
 import main as backend_main
 from app.api.endpoints.auth import router as auth_router
-from app.core.auth_utils import create_access_token, hash_password, get_current_user
+from app.core.auth_utils import (
+    ROLE_ADMIN,
+    ROLE_VIEWER,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    require_roles,
+)
 
 
 class AuthFlowTests(unittest.TestCase):
@@ -26,13 +33,14 @@ class AuthFlowTests(unittest.TestCase):
                 "email": "admin@example.com",
                 "hashed_password": hash_password("StrongPass123!"),
                 "is_active": True,
+                "role": ROLE_ADMIN,
             }
         }
 
         async def _get_user_by_email(email: str):
             return self.users.get(email)
 
-        async def _create_user(email: str, hashed_password: str):
+        async def _create_user(email: str, hashed_password: str, role: str = ROLE_VIEWER):
             if email in self.users:
                 raise Exception("duplicate key value violates unique constraint")
             self.users[email] = {
@@ -40,6 +48,7 @@ class AuthFlowTests(unittest.TestCase):
                 "email": email,
                 "hashed_password": hashed_password,
                 "is_active": True,
+                "role": role,
             }
             return "new-id"
 
@@ -56,6 +65,10 @@ class AuthFlowTests(unittest.TestCase):
         @app.get("/protected")
         async def protected_route(current_user=Depends(get_current_user)):
             return {"email": current_user["email"]}
+
+        @app.get("/admin-only")
+        async def admin_only(_=Depends(require_roles(ROLE_ADMIN))):
+            return {"ok": True}
 
         self.client = TestClient(app)
 
@@ -116,6 +129,7 @@ class AuthFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["success"])
         self.assertIn("new@example.com", self.users)
+        self.assertEqual(self.users["new@example.com"]["role"], ROLE_VIEWER)
         self.assertIn("access_token", response.cookies)
         self.assertIn("refresh_token", response.cookies)
 
@@ -153,6 +167,37 @@ class AuthFlowTests(unittest.TestCase):
         response = self.client.get("/protected")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["email"], "admin@example.com")
+
+    def test_me_returns_current_user_with_access_cookie(self):
+        access_token = create_access_token({"sub": "admin@example.com"})
+        self.client.cookies.set("access_token", access_token)
+
+        response = self.client.get("/api/auth/me")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["user"]["email"], "admin@example.com")
+
+    def test_me_without_auth_returns_401(self):
+        client = TestClient(self.client.app)
+        response = client.get("/api/auth/me")
+        self.assertEqual(response.status_code, 401)
+
+    def test_admin_only_requires_role(self):
+        self.users["admin@example.com"]["role"] = ROLE_VIEWER
+        access_token = create_access_token({"sub": "admin@example.com"})
+        self.client.cookies.set("access_token", access_token)
+
+        response = self.client.get("/admin-only")
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_only_allows_admin_role(self):
+        self.users["admin@example.com"]["role"] = ROLE_ADMIN
+        access_token = create_access_token({"sub": "admin@example.com"})
+        self.client.cookies.set("access_token", access_token)
+
+        response = self.client.get("/admin-only")
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

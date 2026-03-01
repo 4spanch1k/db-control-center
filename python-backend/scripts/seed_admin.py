@@ -33,11 +33,12 @@ async def seed_admin() -> int:
         if existing_user:
             print(f"User {email} already exists. Updating password...")
             await db_manager.update_user_password(email, hash_password(password))
+            await db_manager.update_user_role(email, "admin")
 
-            print("Admin password updated successfully.")
+            print("Admin password and role updated successfully.")
             return 0
 
-        user_id = await db_manager.create_user(email, hash_password(password))
+        user_id = await db_manager.create_user(email, hash_password(password), role="admin")
         print(f"Admin user created successfully: {email} (id={user_id})")
         return 0
     finally:

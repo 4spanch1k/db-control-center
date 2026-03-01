@@ -33,6 +33,7 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
             log_backup_action=AsyncMock(),
             restore_database=AsyncMock(return_value=True),
             log_backup_deletion=AsyncMock(),
+            log_audit_action=AsyncMock(),
         )
         self.s3_manager = SimpleNamespace(
             upload_file=AsyncMock(return_value=True),
@@ -55,7 +56,10 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_trigger_backup_create_schedules_background_job(self):
         tasks = BackgroundTasks()
-        response = await backend_main.trigger_backup_create(tasks, _={"email": "admin@example.com"})
+        response = await backend_main.trigger_backup_create(
+            tasks,
+            current_user={"email": "admin@example.com", "role": "admin"},
+        )
 
         self.assertTrue(response.success)
         self.assertEqual(response.message, "Backup process started in background")
@@ -65,7 +69,11 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_trigger_backup_restore_schedules_background_job(self):
         tasks = BackgroundTasks()
         payload = backend_main.RestoreRequest(filename="backup.sql")
-        response = await backend_main.trigger_backup_restore(payload, tasks, _={"email": "admin@example.com"})
+        response = await backend_main.trigger_backup_restore(
+            payload,
+            tasks,
+            current_user={"email": "admin@example.com", "role": "admin"},
+        )
 
         self.assertTrue(response.success)
         self.assertIn("Restore process for backup.sql started in background", response.message)
@@ -169,7 +177,9 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.telegram_alerter.send_error_alert.assert_awaited_once()
 
     async def test_trigger_cleanup_success(self):
-        response = await backend_main.trigger_cleanup(_={"email": "admin@example.com"})
+        response = await backend_main.trigger_cleanup(
+            current_user={"email": "admin@example.com", "role": "admin"}
+        )
 
         self.assertTrue(response.success)
         self.assertEqual(response.deleted_files, 2)
@@ -183,7 +193,9 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.s3_manager.cleanup_old_backups = AsyncMock(side_effect=RuntimeError("cleanup broken"))
 
         with self.assertRaises(HTTPException) as context:
-            await backend_main.trigger_cleanup(_={"email": "admin@example.com"})
+            await backend_main.trigger_cleanup(
+                current_user={"email": "admin@example.com", "role": "admin"}
+            )
 
         self.assertEqual(context.exception.status_code, 500)
         self.telegram_alerter.send_error_alert.assert_awaited_once()

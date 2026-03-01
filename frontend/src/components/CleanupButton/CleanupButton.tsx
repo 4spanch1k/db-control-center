@@ -8,13 +8,22 @@ type CleanupState = "idle" | "loading" | "success" | "error";
 
 interface CleanupButtonProps {
   onSuccess?: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
-export default function CleanupButton({ onSuccess }: CleanupButtonProps) {
+export default function CleanupButton({
+  onSuccess,
+  disabled = false,
+  disabledReason,
+}: CleanupButtonProps) {
   const [state, setState] = useState<CleanupState>("idle");
   const [message, setMessage] = useState<string>("");
 
   const handleCleanup = async () => {
+    if (disabled) {
+      return;
+    }
     setState("loading");
     setMessage("");
 
@@ -52,11 +61,16 @@ export default function CleanupButton({ onSuccess }: CleanupButtonProps) {
       <button
         className={styles.cleanupButton}
         onClick={handleCleanup}
-        disabled={state === "loading"}
+        disabled={state === "loading" || disabled}
+        title={disabled ? disabledReason : undefined}
       >
         {state === "loading" ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
         {state === "loading" ? "Запуск очистки..." : "Очистить бэкапы"}
       </button>
+
+      {disabled && disabledReason && (
+        <div className={styles.disabledHint}>{disabledReason}</div>
+      )}
 
       {message && (
         <div
