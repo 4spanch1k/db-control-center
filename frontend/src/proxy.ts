@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PAGE_PATHS = new Set(['/', '/login', '/register']);
 const PUBLIC_API_PREFIXES = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'];
-const PRIVATE_PAGE_PREFIXES = ['/dashboard', '/analytics', '/settings', '/audit'];
+const PRIVATE_PAGE_PREFIXES = ['/dashboard', '/analytics', '/settings', '/audit', '/users'];
 
 function hasSession(request: NextRequest): boolean {
   const accessToken = request.cookies.get('access_token')?.value;

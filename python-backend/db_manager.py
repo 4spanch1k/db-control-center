@@ -5,6 +5,7 @@ PostgreSQL Database Manager
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Dict, Optional, Tuple
 
 import asyncpg
@@ -461,6 +462,66 @@ class DatabaseManager:
             if conn:
                 await self.pool.release(conn)
 
+    async def list_users(self, limit: int = 200):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id,
+                    email,
+                    role,
+                    is_active,
+                    created_at
+                FROM users
+                ORDER BY created_at DESC
+                LIMIT $1
+                """,
+                max(1, min(limit, 500)),
+            )
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error listing users: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def update_user_role_by_id(self, user_id: str, role: str) -> bool:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            updated = await conn.execute(
+                "UPDATE users SET role = $1 WHERE id = $2::uuid",
+                role,
+                user_id,
+            )
+            return updated.endswith("1")
+        except Exception as e:
+            logger.error(f"Error updating user role by id: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def update_user_active_by_id(self, user_id: str, is_active: bool) -> bool:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            updated = await conn.execute(
+                "UPDATE users SET is_active = $1 WHERE id = $2::uuid",
+                is_active,
+                user_id,
+            )
+            return updated.endswith("1")
+        except Exception as e:
+            logger.error(f"Error updating user active status by id: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
     async def update_user_role(self, email: str, role: str) -> bool:
         conn = None
         try:
@@ -535,6 +596,31 @@ class DatabaseManager:
             return [dict(row) for row in rows]
         except Exception as e:
             logger.error(f"Error reading audit logs: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def count_user_action_usage(self, user_email: str, action: str, since: datetime) -> int:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            used = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM audit_logs
+                WHERE user_email = $1
+                  AND action = $2
+                  AND created_at >= $3
+                  AND status IN ('accepted', 'success', 'partial')
+                """,
+                user_email,
+                action,
+                since,
+            )
+            return int(used or 0)
+        except Exception as e:
+            logger.error(f"Error counting user action usage: {e}")
             raise
         finally:
             if conn:

@@ -34,6 +34,7 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
             restore_database=AsyncMock(return_value=True),
             log_backup_deletion=AsyncMock(),
             log_audit_action=AsyncMock(),
+            count_user_action_usage=AsyncMock(return_value=0),
         )
         self.s3_manager = SimpleNamespace(
             upload_file=AsyncMock(return_value=True),
@@ -199,6 +200,19 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.exception.status_code, 500)
         self.telegram_alerter.send_error_alert.assert_awaited_once()
+
+    async def test_operator_limit_exceeded_returns_429(self):
+        self.db_manager.count_user_action_usage = AsyncMock(return_value=20)
+        tasks = BackgroundTasks()
+
+        with self.assertRaises(HTTPException) as context:
+            await backend_main.trigger_backup_create(
+                tasks,
+                current_user={"email": "operator@example.com", "role": "operator"},
+            )
+
+        self.assertEqual(context.exception.status_code, 429)
+        self.assertEqual(len(tasks.tasks), 0)
 
 
 if __name__ == "__main__":

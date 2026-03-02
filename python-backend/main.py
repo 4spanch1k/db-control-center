@@ -8,7 +8,7 @@ import os
 import asyncio
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
@@ -65,6 +65,32 @@ s3_manager: S3Manager = None
 telegram_alerter: TelegramAlerter = None
 scheduler: AsyncIOScheduler = None
 
+# daily limits per role for monetization baseline
+ACTION_BACKUP_CREATE = "backup.create"
+ACTION_BACKUP_RESTORE = "backup.restore"
+ACTION_BACKUP_CLEANUP = "backup.cleanup"
+ACTION_ANALYTICS_MANUAL = "analytics.collect_manual"
+METERED_ACTIONS = (
+    ACTION_BACKUP_CREATE,
+    ACTION_BACKUP_RESTORE,
+    ACTION_BACKUP_CLEANUP,
+    ACTION_ANALYTICS_MANUAL,
+)
+ROLE_DAILY_LIMITS: dict[str, dict[str, int | None]] = {
+    ROLE_ADMIN: {
+        ACTION_BACKUP_CREATE: None,
+        ACTION_BACKUP_RESTORE: None,
+        ACTION_BACKUP_CLEANUP: None,
+        ACTION_ANALYTICS_MANUAL: None,
+    },
+    ROLE_OPERATOR: {
+        ACTION_BACKUP_CREATE: 20,
+        ACTION_BACKUP_RESTORE: 5,
+        ACTION_BACKUP_CLEANUP: 10,
+        ACTION_ANALYTICS_MANUAL: 60,
+    },
+}
+
 # ============================================================================
 # MODELS
 # ============================================================================
@@ -112,6 +138,21 @@ class AuditLogsResponse(BaseModel):
     success: bool
     count: int
     data: list[AuditLogEntry]
+
+
+class UsageLimitEntry(BaseModel):
+    action: str
+    limit: int | None
+    used: int
+    remaining: int | None
+    blocked: bool
+
+
+class UsageLimitsResponse(BaseModel):
+    success: bool
+    role: str
+    window: str
+    data: list[UsageLimitEntry]
 
 
 # ============================================================================
@@ -257,6 +298,81 @@ async def write_audit_log(
         logger.error(f"Failed to write audit log ({action}): {exc}")
 
 
+def get_limits_for_role(role: str) -> dict[str, int | None]:
+    role_key = str(role).lower()
+    if role_key in ROLE_DAILY_LIMITS:
+        return ROLE_DAILY_LIMITS[role_key]
+
+    # unknown/lowest role: all metered actions blocked by default
+    return {action: 0 for action in METERED_ACTIONS}
+
+
+def utc_day_start() -> datetime:
+    now = datetime.now(timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def get_action_usage(user_email: str, action: str) -> int:
+    try:
+        return await db_manager.count_user_action_usage(
+            user_email=user_email,
+            action=action,
+            since=utc_day_start(),
+        )
+    except Exception as exc:
+        # fail-open on metering issues to avoid service outage
+        logger.error(f"Usage counter failed for {user_email}/{action}: {exc}")
+        return 0
+
+
+async def enforce_daily_limit(user: dict, action: str) -> None:
+    role = str(user.get("role", "")).lower()
+    limits = get_limits_for_role(role)
+    action_limit = limits.get(action)
+    if action_limit is None:
+        return
+
+    used = await get_action_usage(user.get("email", "unknown"), action)
+    if used < action_limit:
+        return
+
+    await write_audit_log(
+        user=user,
+        action=action,
+        resource="quota",
+        status="denied_limit",
+        details=f"limit={action_limit}, used={used}",
+    )
+    raise HTTPException(
+        status_code=429,
+        detail=(
+            "Дневной лимит исчерпан для операции "
+            f"`{action}`: {used}/{action_limit}"
+        ),
+    )
+
+
+async def build_usage_limits(user: dict) -> list[UsageLimitEntry]:
+    role = str(user.get("role", "")).lower()
+    email = user.get("email", "unknown")
+    limits = get_limits_for_role(role)
+    rows: list[UsageLimitEntry] = []
+    for action in METERED_ACTIONS:
+        action_limit = limits.get(action)
+        used = await get_action_usage(email, action)
+        remaining = None if action_limit is None else max(action_limit - used, 0)
+        rows.append(
+            UsageLimitEntry(
+                action=action,
+                limit=action_limit,
+                used=used,
+                remaining=remaining,
+                blocked=(action_limit is not None and used >= action_limit),
+            )
+        )
+    return rows
+
+
 # ============================================================================
 # SCHEDULED JOBS
 # ============================================================================
@@ -373,6 +489,7 @@ async def lifespan(app: FastAPI):
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints.connections import router as connections_router
 from app.api.endpoints.auth import router as auth_router
+from app.api.endpoints.users import router as users_router
 
 app = FastAPI(
     title="DB Control Center Python Backend",
@@ -391,6 +508,7 @@ app.add_middleware(
 
 app.include_router(connections_router, prefix="/api/connections", tags=["connections"])
 app.include_router(auth_router, prefix="/api", tags=["auth"])
+app.include_router(users_router, prefix="/api", tags=["users"])
 
 
 # ============================================================================
@@ -495,10 +613,11 @@ async def trigger_backup_create(
     current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
 ) -> BackupResponse:
     """Запуск создания бэкапа в фоне"""
+    await enforce_daily_limit(current_user, ACTION_BACKUP_CREATE)
     background_tasks.add_task(create_backup_job)
     await write_audit_log(
         user=current_user,
-        action="backup.create",
+        action=ACTION_BACKUP_CREATE,
         resource="control_center",
         status="accepted",
     )
@@ -549,10 +668,11 @@ async def trigger_backup_restore(
     current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
 ) -> BackupResponse:
     """Запуск восстановления бэкапа в фоне"""
+    await enforce_daily_limit(current_user, ACTION_BACKUP_RESTORE)
     background_tasks.add_task(restore_backup_job, request.filename)
     await write_audit_log(
         user=current_user,
-        action="backup.restore",
+        action=ACTION_BACKUP_RESTORE,
         resource=request.filename,
         status="accepted",
     )
@@ -567,6 +687,7 @@ async def trigger_cleanup(current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OP
     Эндпоинт вызывается кнопкой на дашборде
     """
     logger.info("🗑️  Manual cleanup triggered")
+    await enforce_daily_limit(current_user, ACTION_BACKUP_CLEANUP)
 
     try:
         # Запустить очистку в фоне
@@ -594,7 +715,7 @@ async def trigger_cleanup(current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OP
 
         await write_audit_log(
             user=current_user,
-            action="backup.cleanup",
+            action=ACTION_BACKUP_CLEANUP,
             resource="backups",
             status="success" if error_count == 0 else "partial",
             details=f"deleted={deleted_count}, errors={error_count}, freed={total_size}",
@@ -614,7 +735,7 @@ async def trigger_cleanup(current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OP
         await telegram_alerter.send_error_alert("Manual Cleanup", str(e))
         await write_audit_log(
             user=current_user,
-            action="backup.cleanup",
+            action=ACTION_BACKUP_CLEANUP,
             resource="backups",
             status="error",
             details=str(e),
@@ -632,6 +753,7 @@ async def trigger_analytics(
     Эндпоинт для ручного срабатывания сбора данных
     """
     logger.info("📊 Manual analytics collection triggered")
+    await enforce_daily_limit(current_user, ACTION_ANALYTICS_MANUAL)
 
     try:
         # Получить статистику БД
@@ -652,7 +774,7 @@ async def trigger_analytics(
 
         await write_audit_log(
             user=current_user,
-            action="analytics.collect_manual",
+            action=ACTION_ANALYTICS_MANUAL,
             resource="analytics_stats",
             status="success",
             details=f"record_id={record_id}",
@@ -668,7 +790,7 @@ async def trigger_analytics(
         logger.error(f"❌ Analytics collection failed: {e}")
         await write_audit_log(
             user=current_user,
-            action="analytics.collect_manual",
+            action=ACTION_ANALYTICS_MANUAL,
             resource="analytics_stats",
             status="error",
             details=str(e),
@@ -683,6 +805,19 @@ async def get_audit_logs(
 ) -> AuditLogsResponse:
     rows = await db_manager.get_recent_audit_logs(limit=limit)
     return AuditLogsResponse(success=True, count=len(rows), data=rows)
+
+
+@app.get("/api/usage/limits", response_model=UsageLimitsResponse)
+async def get_usage_limits(
+    current_user=Depends(get_current_user),
+) -> UsageLimitsResponse:
+    entries = await build_usage_limits(current_user)
+    return UsageLimitsResponse(
+        success=True,
+        role=str(current_user.get("role", "viewer")).lower(),
+        window="day",
+        data=entries,
+    )
 
 
 # ============================================================================
@@ -702,6 +837,7 @@ async def root():
             "trigger_cleanup": "POST /api/trigger-cleanup",
             "trigger_analytics": "POST /api/trigger-analytics",
             "audit_logs": "GET /api/audit/logs",
+            "usage_limits": "GET /api/usage/limits",
             "docs": "/docs",
         },
     }
