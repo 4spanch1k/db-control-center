@@ -148,7 +148,10 @@ export default function UsersPage() {
                         <td>{new Date(user.created_at).toLocaleString("ru-RU")}</td>
                         <td>
                           <button
-                            className={styles.actionButton}
+                            type="button"
+                            className={`${styles.actionButton} ${
+                              user.is_active ? styles.deactivateButton : styles.activateButton
+                            }`}
                             onClick={() => updateActive(user.id, !user.is_active)}
                             disabled={isSaving}
                           >

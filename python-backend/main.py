@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
-from app.core.auth_utils import ROLE_ADMIN, ROLE_OPERATOR, get_current_user, require_roles
+from app.core.auth_utils import get_current_user
 from pydantic import BaseModel
 from app.api.endpoints.billing import get_default_billing_plans
 
@@ -66,7 +66,7 @@ s3_manager: S3Manager = None
 telegram_alerter: TelegramAlerter = None
 scheduler: AsyncIOScheduler = None
 
-# daily limits per role for monetization baseline
+# daily limits per plan for monetization
 ACTION_BACKUP_CREATE = "backup.create"
 ACTION_BACKUP_RESTORE = "backup.restore"
 ACTION_BACKUP_CLEANUP = "backup.cleanup"
@@ -77,18 +77,24 @@ METERED_ACTIONS = (
     ACTION_BACKUP_CLEANUP,
     ACTION_ANALYTICS_MANUAL,
 )
-ROLE_DAILY_LIMITS: dict[str, dict[str, int | None]] = {
-    ROLE_ADMIN: {
+PLAN_DAILY_LIMITS: dict[str, dict[str, int | None]] = {
+    "max": {
         ACTION_BACKUP_CREATE: None,
         ACTION_BACKUP_RESTORE: None,
         ACTION_BACKUP_CLEANUP: None,
         ACTION_ANALYTICS_MANUAL: None,
     },
-    ROLE_OPERATOR: {
-        ACTION_BACKUP_CREATE: 20,
-        ACTION_BACKUP_RESTORE: 5,
-        ACTION_BACKUP_CLEANUP: 10,
-        ACTION_ANALYTICS_MANUAL: 60,
+    "pro": {
+        ACTION_BACKUP_CREATE: 40,
+        ACTION_BACKUP_RESTORE: 10,
+        ACTION_BACKUP_CLEANUP: 20,
+        ACTION_ANALYTICS_MANUAL: 200,
+    },
+    "free": {
+        ACTION_BACKUP_CREATE: 2,
+        ACTION_BACKUP_RESTORE: 1,
+        ACTION_BACKUP_CLEANUP: 1,
+        ACTION_ANALYTICS_MANUAL: 10,
     },
 }
 
@@ -151,7 +157,7 @@ class UsageLimitEntry(BaseModel):
 
 class UsageLimitsResponse(BaseModel):
     success: bool
-    role: str
+    plan: str
     window: str
     data: list[UsageLimitEntry]
 
@@ -300,13 +306,11 @@ async def write_audit_log(
         logger.error(f"Failed to write audit log ({action}): {exc}")
 
 
-def get_limits_for_role(role: str) -> dict[str, int | None]:
-    role_key = str(role).lower()
-    if role_key in ROLE_DAILY_LIMITS:
-        return ROLE_DAILY_LIMITS[role_key]
-
-    # unknown/lowest role: all metered actions blocked by default
-    return {action: 0 for action in METERED_ACTIONS}
+def get_limits_for_plan(plan_code: str) -> dict[str, int | None]:
+    plan_key = str(plan_code).lower()
+    if plan_key in PLAN_DAILY_LIMITS:
+        return PLAN_DAILY_LIMITS[plan_key]
+    return PLAN_DAILY_LIMITS["free"]
 
 
 def utc_day_start() -> datetime:
@@ -327,9 +331,28 @@ async def get_action_usage(user_email: str, action: str) -> int:
         return 0
 
 
+async def get_effective_plan_code(user: dict) -> str:
+    if not db_manager:
+        return "free"
+    user_id = user.get("id")
+    if not user_id:
+        return "free"
+    if not hasattr(db_manager, "get_current_subscription"):
+        return "free"
+    try:
+        subscription = await db_manager.get_current_subscription(str(user_id))
+        if subscription and str(subscription.get("status", "")).lower() == "active":
+            plan_code = str(subscription.get("plan_code", "free")).lower()
+            if plan_code in PLAN_DAILY_LIMITS:
+                return plan_code
+    except Exception as exc:
+        logger.error(f"Failed to resolve plan for user {user.get('email')}: {exc}")
+    return "free"
+
+
 async def enforce_daily_limit(user: dict, action: str) -> None:
-    role = str(user.get("role", "")).lower()
-    limits = get_limits_for_role(role)
+    plan_code = await get_effective_plan_code(user)
+    limits = get_limits_for_plan(plan_code)
     action_limit = limits.get(action)
     if action_limit is None:
         return
@@ -343,7 +366,7 @@ async def enforce_daily_limit(user: dict, action: str) -> None:
         action=action,
         resource="quota",
         status="denied_limit",
-        details=f"limit={action_limit}, used={used}",
+        details=f"plan={plan_code}, limit={action_limit}, used={used}",
     )
     raise HTTPException(
         status_code=429,
@@ -355,9 +378,9 @@ async def enforce_daily_limit(user: dict, action: str) -> None:
 
 
 async def build_usage_limits(user: dict) -> list[UsageLimitEntry]:
-    role = str(user.get("role", "")).lower()
     email = user.get("email", "unknown")
-    limits = get_limits_for_role(role)
+    plan_code = await get_effective_plan_code(user)
+    limits = get_limits_for_plan(plan_code)
     rows: list[UsageLimitEntry] = []
     for action in METERED_ACTIONS:
         action_limit = limits.get(action)
@@ -614,7 +637,7 @@ async def create_backup_job():
 @app.post("/api/backup/create", response_model=BackupResponse)
 async def trigger_backup_create(
     background_tasks: BackgroundTasks,
-    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+    current_user=Depends(get_current_user),
 ) -> BackupResponse:
     """Запуск создания бэкапа в фоне"""
     await enforce_daily_limit(current_user, ACTION_BACKUP_CREATE)
@@ -669,7 +692,7 @@ async def restore_backup_job(filename: str):
 async def trigger_backup_restore(
     request: RestoreRequest,
     background_tasks: BackgroundTasks,
-    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+    current_user=Depends(get_current_user),
 ) -> BackupResponse:
     """Запуск восстановления бэкапа в фоне"""
     await enforce_daily_limit(current_user, ACTION_BACKUP_RESTORE)
@@ -684,7 +707,7 @@ async def trigger_backup_restore(
 
 
 @app.post("/api/trigger-cleanup", response_model=CleanupResponse)
-async def trigger_cleanup(current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR))) -> CleanupResponse:
+async def trigger_cleanup(current_user=Depends(get_current_user)) -> CleanupResponse:
     """
     Принудительно запустить очистку старых бэкапов
     
@@ -749,7 +772,7 @@ async def trigger_cleanup(current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OP
 
 @app.post("/api/trigger-analytics", response_model=AnalyticsResponse)
 async def trigger_analytics(
-    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+    current_user=Depends(get_current_user),
 ) -> AnalyticsResponse:
     """
     Принудительно собрать аналитику
@@ -805,7 +828,7 @@ async def trigger_analytics(
 @app.get("/api/audit/logs", response_model=AuditLogsResponse)
 async def get_audit_logs(
     limit: int = Query(default=100, ge=1, le=500),
-    _=Depends(require_roles(ROLE_ADMIN)),
+    _=Depends(get_current_user),
 ) -> AuditLogsResponse:
     rows = await db_manager.get_recent_audit_logs(limit=limit)
     return AuditLogsResponse(success=True, count=len(rows), data=rows)
@@ -816,9 +839,10 @@ async def get_usage_limits(
     current_user=Depends(get_current_user),
 ) -> UsageLimitsResponse:
     entries = await build_usage_limits(current_user)
+    plan_code = await get_effective_plan_code(current_user)
     return UsageLimitsResponse(
         success=True,
-        role=str(current_user.get("role", "viewer")).lower(),
+        plan=plan_code,
         window="day",
         data=entries,
     )

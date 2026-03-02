@@ -144,7 +144,7 @@ class BillingFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["success"])
-        self.assertEqual(payload["role"], "viewer")
+        self.assertEqual(payload["plan_code"], "free")
         self.assertEqual(payload["current_plan"]["code"], "free")
 
     def test_mock_checkout_activates_pro_plan_and_role(self):

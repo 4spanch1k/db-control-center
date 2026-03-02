@@ -12,7 +12,7 @@ router = APIRouter()
 ROLE_BY_PLAN = {
     "free": "viewer",
     "pro": "operator",
-    "team": "admin",
+    "max": "admin",
 }
 
 
@@ -41,15 +41,38 @@ def get_default_billing_plans() -> list[dict]:
             "sort_order": 20,
         },
         {
-            "code": "team",
-            "name": "Team",
-            "description": "Полный админ-доступ и управление командой.",
-            "role": ROLE_BY_PLAN["team"],
-            "price_monthly_cents": int(os.getenv("BILLING_TEAM_MONTHLY_CENTS", "7900")),
+            "code": "max",
+            "name": "Max",
+            "description": "Безлимитный доступ ко всем ручным операциям и максимум возможностей.",
+            "role": ROLE_BY_PLAN["max"],
+            "price_monthly_cents": int(
+                os.getenv("BILLING_MAX_MONTHLY_CENTS", os.getenv("BILLING_TEAM_MONTHLY_CENTS", "7900"))
+            ),
             "currency": os.getenv("BILLING_CURRENCY", "usd"),
-            "stripe_price_id": os.getenv("STRIPE_PRICE_ID_ADMIN_MONTHLY", "") or None,
+            "stripe_price_id": (
+                os.getenv("STRIPE_PRICE_ID_MAX_MONTHLY", "")
+                or os.getenv("STRIPE_PRICE_ID_ADMIN_MONTHLY", "")
+                or None
+            ),
             "is_active": True,
             "sort_order": 30,
+        },
+        {
+            "code": "team",
+            "name": "Team (Legacy)",
+            "description": "Legacy plan alias, hidden from active billing list.",
+            "role": ROLE_BY_PLAN["max"],
+            "price_monthly_cents": int(
+                os.getenv("BILLING_MAX_MONTHLY_CENTS", os.getenv("BILLING_TEAM_MONTHLY_CENTS", "7900"))
+            ),
+            "currency": os.getenv("BILLING_CURRENCY", "usd"),
+            "stripe_price_id": (
+                os.getenv("STRIPE_PRICE_ID_MAX_MONTHLY", "")
+                or os.getenv("STRIPE_PRICE_ID_ADMIN_MONTHLY", "")
+                or None
+            ),
+            "is_active": False,
+            "sort_order": 99,
         },
     ]
 
@@ -82,7 +105,7 @@ class SubscriptionInfo(BaseModel):
 
 class BillingCurrentResponse(BaseModel):
     success: bool
-    role: str
+    plan_code: str
     current_plan: BillingPlanResponse | None = None
     subscription: SubscriptionInfo | None = None
 
@@ -213,12 +236,14 @@ async def get_current_billing(current_user=Depends(get_current_user)):
     db_manager = _get_db_manager()
 
     plans = await db_manager.get_billing_plans(only_active=True)
-    current_plan = next(
-        (plan for plan in plans if plan["role"] == current_user.get("role")),
-        None,
-    )
-
     subscription_row = await db_manager.get_current_subscription(str(current_user["id"]))
+    if subscription_row and str(subscription_row.get("status", "")).lower() == "active":
+        current_plan_code = str(subscription_row.get("plan_code", "free")).lower()
+        current_plan = next((plan for plan in plans if plan["code"] == current_plan_code), None)
+    else:
+        current_plan_code = "free"
+        current_plan = next((plan for plan in plans if plan["code"] == "free"), None)
+
     if subscription_row:
         subscription = SubscriptionInfo(
             status=subscription_row["status"],
@@ -234,7 +259,7 @@ async def get_current_billing(current_user=Depends(get_current_user)):
 
     return BillingCurrentResponse(
         success=True,
-        role=str(current_user.get("role", "viewer")).lower(),
+        plan_code=current_plan_code,
         current_plan=_normalize_plan(current_plan) if current_plan else None,
         subscription=subscription,
     )

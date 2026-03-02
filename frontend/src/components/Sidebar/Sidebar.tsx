@@ -1,134 +1,125 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart, Database, History, Settings, PanelLeftClose, PanelLeftOpen, LogOut, Home, ShieldCheck, Users, CreditCard, type LucideIcon } from "lucide-react";
+import { BarChart, CreditCard, Database, LogOut, Settings, type LucideIcon } from "lucide-react";
 import styles from "./Sidebar.module.css";
 
-type UserRole = "admin" | "operator" | "viewer";
-type MenuItem = { label: string; href: string; icon: LucideIcon; roles?: UserRole[] };
+type PlanCode = "free" | "pro" | "max";
+type MenuItem = { label: string; href: string; icon: LucideIcon };
+
 const menuItems: MenuItem[] = [
-    { label: "Управление БД", href: "/dashboard", icon: Database },
-    { label: "Аналитика", href: "/analytics", icon: BarChart },
-    { label: "История бэкапов", href: "/dashboard#history", icon: History },
-    { label: "Настройки", href: "/settings", icon: Settings },
-    { label: "Тариф", href: "/billing", icon: CreditCard },
-    { label: "Пользователи", href: "/users", icon: Users, roles: ["admin"] },
-    { label: "Аудит", href: "/audit", icon: ShieldCheck, roles: ["admin"] },
+  { label: "Управление БД", href: "/dashboard", icon: Database },
+  { label: "Аналитика", href: "/analytics", icon: BarChart },
+  { label: "Тариф", href: "/billing", icon: CreditCard },
+  { label: "Настройки", href: "/settings", icon: Settings },
 ];
 
+function normalizePlanCode(raw: unknown): PlanCode {
+  if (raw === "pro" || raw === "max" || raw === "free") {
+    return raw;
+  }
+  return "free";
+}
+
+function planLabel(plan: PlanCode): string {
+  if (plan === "max") return "MAX";
+  if (plan === "pro") return "PRO";
+  return "FREE";
+}
+
 export default function Sidebar() {
-    const [collapsed, setCollapsed] = useState(false);
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const [userEmail, setUserEmail] = useState<string | null>(null);
-    const [userRole, setUserRole] = useState<UserRole>("viewer");
-    const [isUserLoading, setIsUserLoading] = useState(true);
-    const pathname = usePathname();
-    const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<PlanCode>("free");
+  const pathname = usePathname();
+  const router = useRouter();
 
-    useEffect(() => {
-        let isMounted = true;
+  useEffect(() => {
+    let isMounted = true;
 
-        const loadCurrentUser = async () => {
-            try {
-                const response = await fetch("/api/auth/me", { method: "GET", credentials: "same-origin" });
-                if (!response.ok) {
-                    if (isMounted) {
-                        setUserEmail(null);
-                    }
-                    return;
-                }
+    const loadSessionData = async () => {
+      try {
+        const [meResponse, billingResponse] = await Promise.all([
+          fetch("/api/auth/me", { method: "GET", credentials: "same-origin" }),
+          fetch("/api/billing/current", { method: "GET", credentials: "same-origin" }),
+        ]);
 
-                const data = await response.json();
-                if (isMounted) {
-                    setUserEmail(data?.user?.email ?? null);
-                    const role = data?.user?.role;
-                    if (role === "admin" || role === "operator" || role === "viewer") {
-                        setUserRole(role);
-                    }
-                }
-            } catch {
-                if (isMounted) {
-                    setUserEmail(null);
-                    setUserRole("viewer");
-                }
-            } finally {
-                if (isMounted) {
-                    setIsUserLoading(false);
-                }
-            }
-        };
-
-        loadCurrentUser();
-        return () => {
-            isMounted = false;
-        };
-    }, []);
-
-    const handleLogout = async () => {
-        setIsLoggingOut(true);
-        try {
-            await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-        } finally {
-            setIsLoggingOut(false);
-            router.push("/");
-            router.refresh();
+        if (meResponse.ok) {
+          const meData = await meResponse.json();
+          if (isMounted) {
+            setUserEmail(meData?.user?.email ?? null);
+          }
+        } else if (isMounted) {
+          setUserEmail(null);
         }
+
+        if (billingResponse.ok) {
+          const billingData = await billingResponse.json();
+          if (isMounted) {
+            const code = billingData?.current_plan?.code ?? billingData?.subscription?.plan_code;
+            setCurrentPlan(normalizePlanCode(code));
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setUserEmail(null);
+          setCurrentPlan("free");
+        }
+      }
     };
 
-    return (
-        <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}>
-            <div className={styles.top}>
-                <div className={styles.brand} title="DB Control Center">
-                    <span className={styles.brandIcon}><Database size={18} /></span>
-                    <span className={styles.brandLabel}>DB Control Center</span>
-                </div>
-                <nav className={styles.nav} aria-label="Основная навигация">
-                    {menuItems
-                        .filter((item) => !item.roles || item.roles.includes(userRole))
-                        .map((item) => {
-                        const Icon = item.icon;
-                        const cleanHref = item.href.split("#")[0];
-                        const isActive = cleanHref === "/dashboard"
-                            ? pathname === "/dashboard"
-                            : pathname?.startsWith(cleanHref);
-                        return (
-                            <Link key={item.label} href={item.href} className={`${styles.navItem} ${isActive ? styles.active : ""}`} title={collapsed ? item.label : undefined}>
-                                <Icon className={styles.icon} size={18} />
-                                <span className={styles.label}>{item.label}</span>
-                            </Link>
-                        );
-                        })}
-                </nav>
-            </div>
-            <div className={styles.bottom}>
-                <div className={styles.userCard} title={userEmail ?? undefined}>
-                    <span className={styles.userLabel}>Сессия</span>
-                    <span className={styles.userEmail}>
-                        {isUserLoading ? "Загрузка..." : userEmail ?? "Неизвестный пользователь"}
-                    </span>
-                    {!isUserLoading && <span className={styles.userRole}>{userRole}</span>}
-                </div>
-                <div className={styles.authGroup}>
-                    <Link href="/" className={styles.navItem} title={collapsed ? "На главную" : undefined}>
-                        <Home className={styles.icon} size={18} />
-                        <span className={styles.label}>На главную</span>
-                    </Link>
-                    <button
-                        type="button"
-                        className={`${styles.navItem} ${styles.logoutButton}`}
-                        title={collapsed ? "Выход" : undefined}
-                        onClick={handleLogout}
-                        disabled={isLoggingOut}
-                    >
-                        <LogOut className={styles.icon} size={18} />
-                        <span className={styles.label}>{isLoggingOut ? "Выходим..." : "Выход"}</span>
-                    </button>
-                </div>
-                <button type="button" className={styles.toggleButton} onClick={() => setCollapsed((v) => !v)} aria-label={collapsed ? "Развернуть боковое меню" : "Свернуть боковое меню"} title={collapsed ? "Развернуть" : "Свернуть"}>
-                    {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-                </button>
-            </div>
-        </aside>
-    );
+    loadSessionData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const planText = useMemo(() => planLabel(currentPlan), [currentPlan]);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+    } finally {
+      setIsLoggingOut(false);
+      router.push("/");
+      router.refresh();
+    }
+  };
+
+  return (
+    <header className={styles.topbar}>
+      <div className={styles.brandArea}>
+        <Link href="/dashboard" className={styles.brand} title="DB Control Center">
+          <Database size={18} />
+          <span>DB Control Center</span>
+        </Link>
+      </div>
+
+      <nav className={styles.nav} aria-label="Основная навигация">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const cleanHref = item.href.split("#")[0];
+          const isActive = cleanHref === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(cleanHref);
+          return (
+            <Link key={item.label} href={item.href} className={`${styles.navItem} ${isActive ? styles.active : ""}`}>
+              <Icon size={16} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className={styles.sessionArea}>
+        <span className={styles.planBadge}>{planText}</span>
+        <span className={styles.userEmail}>{userEmail ?? "Пользователь"}</span>
+        <button type="button" className={styles.logoutButton} onClick={handleLogout} disabled={isLoggingOut}>
+          <LogOut size={16} />
+          <span>{isLoggingOut ? "Выход..." : "Выход"}</span>
+        </button>
+      </div>
+    </header>
+  );
 }

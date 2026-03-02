@@ -8,14 +8,12 @@ interface BillingPlan {
   code: string;
   name: string;
   description?: string | null;
-  role: "viewer" | "operator" | "admin";
   price_monthly_cents: number;
   currency: string;
   is_active: boolean;
 }
 
 interface BillingCurrent {
-  role: "viewer" | "operator" | "admin";
   current_plan?: BillingPlan | null;
   subscription?: {
     status: string;
@@ -27,12 +25,6 @@ interface BillingCurrent {
     plan_name: string;
   } | null;
 }
-
-const ROLE_LABEL: Record<"viewer" | "operator" | "admin", string> = {
-  viewer: "Viewer",
-  operator: "Operator",
-  admin: "Admin",
-};
 
 function formatPrice(cents: number, currency: string): string {
   if (cents <= 0) {
@@ -88,7 +80,6 @@ export default function BillingPage() {
 
       setPlans(plansPayload.data || []);
       setCurrent({
-        role: currentPayload.role,
         current_plan: currentPayload.current_plan,
         subscription: currentPayload.subscription,
       });
@@ -107,6 +98,12 @@ export default function BillingPage() {
     () => [...plans].sort((a, b) => a.price_monthly_cents - b.price_monthly_cents),
     [plans]
   );
+
+  const planHint = (code: string): string => {
+    if (code === "max") return "Безлимитный доступ ко всем ручным операциям.";
+    if (code === "pro") return "Расширенные лимиты для активной ежедневной работы.";
+    return "Базовые лимиты для старта и тестирования.";
+  };
 
   const handleCheckout = async (planCode: string) => {
     setPendingPlanCode(planCode);
@@ -154,10 +151,6 @@ export default function BillingPage() {
           {!loading && !error && current && (
             <div className={styles.currentWrap}>
               <div className={styles.currentLine}>
-                <span className={styles.key}>Роль:</span>
-                <span className={styles.value}>{ROLE_LABEL[current.role] || current.role}</span>
-              </div>
-              <div className={styles.currentLine}>
                 <span className={styles.key}>План:</span>
                 <span className={styles.value}>{current.current_plan?.name || "Не определен"}</span>
               </div>
@@ -186,7 +179,7 @@ export default function BillingPage() {
               <CardContent>
                 <p className={styles.price}>{formatPrice(plan.price_monthly_cents, plan.currency)} / month</p>
                 <p className={styles.desc}>{plan.description || "Без описания"}</p>
-                <p className={styles.planRole}>Роль: {ROLE_LABEL[plan.role]}</p>
+                <p className={styles.planRole}>{planHint(plan.code)}</p>
                 <button
                   className={styles.button}
                   type="button"

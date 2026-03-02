@@ -1,5 +1,6 @@
 .shell {
   display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   background: var(--color-bg);
 }
@@ -7,8 +8,14 @@
 .main {
   flex: 1;
   min-width: 0;
-  padding: 24px;
+  padding: 20px 24px 26px;
   animation: page-enter 420ms var(--transition-ease-out) both;
+}
+
+@media (max-width: 960px) {
+  .main {
+    padding: 16px 14px 22px;
+  }
 }
 
 @keyframes page-enter {

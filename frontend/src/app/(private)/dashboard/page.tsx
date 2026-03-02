@@ -15,32 +15,9 @@ interface Backup {
   size_bytes?: number;
 }
 
-type UserRole = "admin" | "operator" | "viewer";
-
 export default function Home() {
   const [status, setStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<Backup[]>([]);
-  const [userRole, setUserRole] = useState<UserRole>("viewer");
-  const [roleLoading, setRoleLoading] = useState(true);
-
-  const canManageBackups = userRole === "admin" || userRole === "operator";
-
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch("/api/auth/me");
-      const data = await response.json();
-      const role = data?.user?.role;
-      if (role === "admin" || role === "operator" || role === "viewer") {
-        setUserRole(role);
-      } else {
-        setUserRole("viewer");
-      }
-    } catch {
-      setUserRole("viewer");
-    } finally {
-      setRoleLoading(false);
-    }
-  };
 
   const fetchHistory = async () => {
     try {
@@ -55,27 +32,28 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchCurrentUser();
-    fetchHistory();
+    const timer = window.setTimeout(() => {
+      void fetchHistory();
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const handleBackup = async () => {
-    if (!canManageBackups) {
-      setStatus("⛔ Недостаточно прав: операция доступна только admin/operator");
-      return;
-    }
     setStatus("⏳ Отправка команды воркеру... (подождите)");
 
     try {
       const res = await fetch('/api/backup', { method: 'POST' });
+      const payload = await res.json().catch(() => null);
 
       if (res.ok) {
         setStatus("✅ Бэкап успешно создан!");
         fetchHistory();
-      } else if (res.status === 403) {
-        setStatus("⛔ Недостаточно прав: операция доступна только admin/operator");
+      } else if (res.status === 429) {
+        setStatus(`⛔ ${payload?.detail || "Дневной лимит тарифа исчерпан. Перейдите на более высокий план."}`);
       } else {
-        setStatus("❌ Ошибка при создании бэкапа.");
+        setStatus(`❌ ${payload?.detail || "Ошибка при создании бэкапа."}`);
       }
     } catch {
       setStatus("❌ Не удалось связаться с сервером.");
@@ -83,10 +61,6 @@ export default function Home() {
   };
 
   const handleRestore = async (filename: string) => {
-    if (!canManageBackups) {
-      setStatus("⛔ Недостаточно прав: операция доступна только admin/operator");
-      return;
-    }
     if (!window.confirm(`Вы уверены? Текущие данные будут перезаписаны! (Файл: ${filename})`)) {
       return;
     }
@@ -98,14 +72,15 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename })
       });
+      const payload = await res.json().catch(() => null);
 
       if (res.ok) {
         setStatus("✅ База успешно восстановлена!");
         fetchHistory();
-      } else if (res.status === 403) {
-        setStatus("⛔ Недостаточно прав: операция доступна только admin/operator");
+      } else if (res.status === 429) {
+        setStatus(`⛔ ${payload?.detail || "Дневной лимит тарифа исчерпан. Перейдите на более высокий план."}`);
       } else {
-        setStatus("❌ Ошибка при восстановлении.");
+        setStatus(`❌ ${payload?.detail || "Ошибка при восстановлении."}`);
       }
     } catch (error) {
       setStatus("❌ Не удалось связаться с сервером.");
@@ -124,25 +99,14 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <p className={styles.serverName}>Сервер: target-postgres | Порт: 5432</p>
-            {!roleLoading && !canManageBackups && (
-              <p className={styles.permissionHint}>
-                Роль <strong>{userRole}</strong>: только чтение. Для backup/restore/cleanup нужны права admin/operator.
-              </p>
-            )}
+            <p className={styles.permissionHint}>
+              Действия доступны для всех тарифов. На Free и Pro действуют дневные лимиты, на Max лимитов нет.
+            </p>
             <div className={styles.buttonGroup}>
-              <button
-                className={styles.button}
-                onClick={handleBackup}
-                disabled={!canManageBackups}
-                title={!canManageBackups ? "Недостаточно прав" : undefined}
-              >
+              <button className={styles.button} onClick={handleBackup}>
                 Сделать бэкап
               </button>
-              <CleanupButton
-                onSuccess={fetchHistory}
-                disabled={!canManageBackups}
-                disabledReason="Недостаточно прав для очистки"
-              />
+              <CleanupButton onSuccess={fetchHistory} />
             </div>
             {status && <div className={styles.status}>{status}</div>}
           </CardContent>
@@ -182,8 +146,6 @@ export default function Home() {
                       <button
                         className={styles.restoreButton}
                         onClick={() => handleRestore(item.file_path)}
-                        disabled={!canManageBackups}
-                        title={!canManageBackups ? "Недостаточно прав" : undefined}
                       >
                         Восстановить
                       </button>

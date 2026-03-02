@@ -62,16 +62,51 @@
 
 .actionButton {
   border: 1px solid var(--color-border);
-  background: transparent;
+  background: #1a1d24;
   color: var(--color-text);
   border-radius: 8px;
-  padding: 7px 10px;
+  padding: 8px 12px;
+  min-width: 132px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 80ms ease;
+}
+
+.actionButton:hover {
+  transform: translateY(-1px);
+}
+
+.actionButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 38%, transparent);
+  outline-offset: 1px;
+}
+
+.activateButton {
+  color: #8ef0cb;
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.activateButton:hover {
+  border-color: rgba(16, 185, 129, 0.75);
+  background: rgba(16, 185, 129, 0.28);
+}
+
+.deactivateButton {
+  color: #ffb3b3;
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.deactivateButton:hover {
+  border-color: rgba(239, 68, 68, 0.75);
+  background: rgba(239, 68, 68, 0.28);
 }
 
 .actionButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
 }
 
 .muted {
