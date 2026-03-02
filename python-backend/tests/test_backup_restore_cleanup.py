@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -28,6 +29,7 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self._original_db = backend_main.db_manager
         self._original_s3 = backend_main.s3_manager
         self._original_tg = backend_main.telegram_alerter
+        self._original_restore_approvals = backend_main.restore_approvals
 
         self.db_manager = SimpleNamespace(
             log_backup_action=AsyncMock(),
@@ -35,6 +37,7 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
             log_backup_deletion=AsyncMock(),
             log_audit_action=AsyncMock(),
             count_user_action_usage=AsyncMock(return_value=0),
+            get_database_stats=AsyncMock(return_value={"active_connections": 0}),
         )
         self.s3_manager = SimpleNamespace(
             upload_file=AsyncMock(return_value=True),
@@ -49,11 +52,13 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
         backend_main.db_manager = self.db_manager
         backend_main.s3_manager = self.s3_manager
         backend_main.telegram_alerter = self.telegram_alerter
+        backend_main.restore_approvals = {}
 
     async def asyncTearDown(self):
         backend_main.db_manager = self._original_db
         backend_main.s3_manager = self._original_s3
         backend_main.telegram_alerter = self._original_tg
+        backend_main.restore_approvals = self._original_restore_approvals
 
     async def test_trigger_backup_create_schedules_background_job(self):
         tasks = BackgroundTasks()
@@ -67,9 +72,45 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(tasks.tasks), 1)
         self.assertIs(tasks.tasks[0].func, backend_main.create_backup_job)
 
+    async def test_prepare_backup_restore_generates_request(self):
+        process = _FakeProcess(
+            returncode=0,
+            stdout=b"; comments\n10 TABLE users\n11 TABLE roles",
+        )
+        payload = backend_main.RestorePrepareRequest(filename="backup.sql")
+
+        with (
+            patch.object(
+                backend_main.asyncio,
+                "create_subprocess_exec",
+                new=AsyncMock(return_value=process),
+            ),
+            patch.object(backend_main.os.path, "getsize", return_value=2048),
+            patch.object(backend_main.os.path, "exists", return_value=False),
+        ):
+            response = await backend_main.prepare_backup_restore(
+                payload,
+                current_user={"email": "admin@example.com", "role": "admin"},
+            )
+
+        self.assertTrue(response.success)
+        self.assertEqual(response.filename, "backup.sql")
+        self.assertEqual(response.backup_size_bytes, 2048)
+        self.assertEqual(response.objects_count, 2)
+        self.assertIn(response.request_id, backend_main.restore_approvals)
+
     async def test_trigger_backup_restore_schedules_background_job(self):
         tasks = BackgroundTasks()
-        payload = backend_main.RestoreRequest(filename="backup.sql")
+        request_id = "restore-request-1"
+        backend_main.restore_approvals[request_id] = {
+            "filename": "backup.sql",
+            "user_email": "admin@example.com",
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+        }
+        payload = backend_main.RestoreConfirmRequest(
+            request_id=request_id,
+            filename_confirmation="backup.sql",
+        )
         response = await backend_main.trigger_backup_restore(
             payload,
             tasks,
@@ -81,6 +122,7 @@ class BackupRestoreCleanupIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(tasks.tasks), 1)
         self.assertIs(tasks.tasks[0].func, backend_main.restore_backup_job)
         self.assertEqual(tasks.tasks[0].args, ("backup.sql",))
+        self.assertNotIn(request_id, backend_main.restore_approvals)
 
     async def test_create_backup_job_success_logs_success(self):
         process = _FakeProcess(returncode=0)

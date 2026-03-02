@@ -5,28 +5,32 @@ import { setAuthCookies } from '@/app/api/auth/cookies';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { request_id, filename_confirmation } = body;
+    const { filename } = body;
 
-    if (!request_id || !filename_confirmation) {
+    if (!filename) {
       return NextResponse.json(
-        { success: false, error: 'Недостаточно данных для подтверждения восстановления' },
+        { success: false, error: 'Имя файла не указано' },
         { status: 400 }
       );
     }
 
     const { response, refreshedSession } = await fetchBackendWithAutoRefresh(
       request,
-      '/api/backup/restore',
+      '/api/backup/restore/prepare',
       {
         method: 'POST',
-        body: JSON.stringify({ request_id, filename_confirmation }),
+        body: JSON.stringify({ filename }),
       }
     );
 
+    const payload = await response.json().catch(() => null);
+
     if (!response.ok) {
-      const errorData = await response.text();
       const errorResponse = NextResponse.json(
-        { success: false, error: `Ошибка запуска восстановления в Python Backend: ${errorData}` },
+        {
+          success: false,
+          error: payload?.detail || payload?.error || 'Ошибка подготовки восстановления',
+        },
         { status: response.status }
       );
       if (refreshedSession) {
@@ -35,14 +39,13 @@ export async function POST(request: NextRequest) {
       return errorResponse;
     }
 
-    const data = await response.json();
-    const successResponse = NextResponse.json({ success: true, data });
+    const successResponse = NextResponse.json({ success: true, data: payload });
     if (refreshedSession) {
       setAuthCookies(successResponse, request, refreshedSession);
     }
     return successResponse;
   } catch (error) {
-    console.error('Ошибка API восстановления:', error);
+    console.error('Ошибка prepare restore API:', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : String(error) },
       { status: 500 }

@@ -20,6 +20,42 @@
   grid-template-columns: 1fr;
 }
 
+.usageGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.usageItem {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--color-bg-tertiary);
+}
+
+.usageBlocked {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.usageTitle {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+
+.usageValue {
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.usageSubtext {
+  margin-top: 4px;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
 .historySection {
   display: flex;
   flex-direction: column;
@@ -155,6 +191,142 @@
 }
 
 .restoreButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modalCard {
+  width: min(580px, 100%);
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, #ffffff 22%);
+  background: color-mix(in srgb, var(--color-bg-primary) 96%, #0b1325 4%);
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.modalTitle {
+  margin: 0 0 10px 0;
+  color: var(--color-text);
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.modalText {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+}
+
+.modalMetaGrid {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.modalMetaItem {
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, #ffffff 20%);
+  border-radius: 10px;
+  background: var(--color-bg-tertiary);
+  padding: 10px 12px;
+}
+
+.modalMetaLabel {
+  display: block;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
+}
+
+.modalMetaValue {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.modalWarning {
+  margin: 14px 0 0;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: var(--color-warning);
+  padding: 10px 12px;
+  font-size: 0.86rem;
+}
+
+.modalLabel {
+  margin-top: 16px;
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.modalInput {
+  margin-top: 8px;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 0.92rem;
+  outline: none;
+}
+
+.modalInput:focus {
+  border-color: color-mix(in srgb, var(--color-warning) 65%, #ffffff 35%);
+}
+
+.modalActions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modalCancelButton {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.modalCancelButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-bg-secondary) 78%, #ffffff 22%);
+}
+
+.modalConfirmButton {
+  border: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.modalConfirmButton:hover:not(:disabled) {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 26%, transparent);
+}
+
+.modalCancelButton:disabled,
+.modalConfirmButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

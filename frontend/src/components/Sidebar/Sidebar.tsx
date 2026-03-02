@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart, CreditCard, Database, LogOut, Settings, type LucideIcon } from "lucide-react";
+import { BarChart, BookOpen, CreditCard, Database, LogOut, Settings, type LucideIcon } from "lucide-react";
 import styles from "./Sidebar.module.css";
 
 type PlanCode = "free" | "pro" | "max";
@@ -12,6 +12,7 @@ type MenuItem = { label: string; href: string; icon: LucideIcon };
 const menuItems: MenuItem[] = [
   { label: "Управление БД", href: "/dashboard", icon: Database },
   { label: "Аналитика", href: "/analytics", icon: BarChart },
+  { label: "Как пользоваться", href: "/guide", icon: BookOpen },
   { label: "Тариф", href: "/billing", icon: CreditCard },
   { label: "Настройки", href: "/settings", icon: Settings },
 ];

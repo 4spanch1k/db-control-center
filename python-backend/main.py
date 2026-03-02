@@ -8,8 +8,9 @@ import os
 import asyncio
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
@@ -97,6 +98,9 @@ PLAN_DAILY_LIMITS: dict[str, dict[str, int | None]] = {
         ACTION_ANALYTICS_MANUAL: 10,
     },
 }
+
+RESTORE_APPROVAL_TTL_SECONDS = int(os.getenv("RESTORE_APPROVAL_TTL_SECONDS", 600))
+restore_approvals: dict[str, dict[str, object]] = {}
 
 # ============================================================================
 # MODELS
@@ -398,6 +402,69 @@ async def build_usage_limits(user: dict) -> list[UsageLimitEntry]:
     return rows
 
 
+def normalize_backup_filename(raw_filename: str) -> str:
+    filename = raw_filename.strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="Имя файла обязательно")
+    if "/" in filename or "\\" in filename or filename in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Некорректное имя файла")
+    return filename
+
+
+def purge_expired_restore_approvals() -> None:
+    now_utc = datetime.now(timezone.utc)
+    expired_keys = [
+        key
+        for key, approval in restore_approvals.items()
+        if approval.get("expires_at") and approval["expires_at"] <= now_utc
+    ]
+    for key in expired_keys:
+        restore_approvals.pop(key, None)
+
+
+async def inspect_backup_before_restore(filename: str) -> tuple[int, int]:
+    file_path = f"/tmp/prepare-{filename}"
+    try:
+        success_download = await s3_manager.download_file(filename, file_path)
+        if not success_download:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Бэкап `{filename}` не найден в хранилище",
+            )
+
+        backup_size = os.path.getsize(file_path)
+        process = await asyncio.create_subprocess_exec(
+            "pg_restore",
+            "-l",
+            file_path,
+            env=dict(os.environ, PGPASSWORD=DB_PASSWORD),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            logger.error(
+                "❌ pg_restore list failed for %s: %s",
+                filename,
+                stderr.decode(errors="ignore")[:500],
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Бэкап не прошел проверку целостности и не может быть восстановлен",
+            )
+
+        objects_count = sum(
+            1
+            for line in stdout.decode(errors="ignore").splitlines()
+            if line.strip() and not line.strip().startswith(";")
+        )
+        return backup_size, objects_count
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
 # ============================================================================
 # SCHEDULED JOBS
 # ============================================================================
@@ -650,8 +717,25 @@ async def trigger_backup_create(
     )
     return BackupResponse(success=True, message="Backup process started in background")
 
-class RestoreRequest(BaseModel):
+class RestorePrepareRequest(BaseModel):
     filename: str
+
+
+class RestorePrepareResponse(BaseModel):
+    success: bool
+    request_id: str
+    filename: str
+    backup_size_bytes: int
+    objects_count: int
+    active_connections: int
+    warning: str | None = None
+    expires_at: datetime
+
+
+class RestoreConfirmRequest(BaseModel):
+    request_id: str
+    filename_confirmation: str
+
 
 async def restore_backup_job(filename: str):
     """Фоновая задача скачивания и восстановления бэкапа"""
@@ -688,22 +772,108 @@ async def restore_backup_job(filename: str):
         if os.path.exists(file_path):
             os.remove(file_path)
 
+@app.post("/api/backup/restore/prepare", response_model=RestorePrepareResponse)
+async def prepare_backup_restore(
+    request: RestorePrepareRequest,
+    current_user=Depends(get_current_user),
+) -> RestorePrepareResponse:
+    """Подготовить безопасное восстановление бэкапа (предпросмотр + approval)."""
+    filename = normalize_backup_filename(request.filename)
+    purge_expired_restore_approvals()
+
+    try:
+        backup_size, objects_count = await inspect_backup_before_restore(filename)
+    except HTTPException as exc:
+        await write_audit_log(
+            user=current_user,
+            action=f"{ACTION_BACKUP_RESTORE}.prepare",
+            resource=filename,
+            status="error",
+            details=str(exc.detail),
+        )
+        raise
+
+    db_stats = await db_manager.get_database_stats()
+    active_connections = int(db_stats.get("active_connections", 0))
+    warning: str | None = None
+    if active_connections > 0:
+        warning = (
+            f"Сейчас есть активные подключения ({active_connections}). "
+            "Рекомендуется выполнять восстановление в окно обслуживания."
+        )
+
+    request_id = str(uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=RESTORE_APPROVAL_TTL_SECONDS
+    )
+    restore_approvals[request_id] = {
+        "filename": filename,
+        "user_email": current_user.get("email", "unknown"),
+        "expires_at": expires_at,
+    }
+
+    await write_audit_log(
+        user=current_user,
+        action=f"{ACTION_BACKUP_RESTORE}.prepare",
+        resource=filename,
+        status="success",
+        details=(
+            f"size={backup_size}, objects={objects_count}, "
+            f"active_conn={active_connections}, request_id={request_id}"
+        ),
+    )
+
+    return RestorePrepareResponse(
+        success=True,
+        request_id=request_id,
+        filename=filename,
+        backup_size_bytes=backup_size,
+        objects_count=objects_count,
+        active_connections=active_connections,
+        warning=warning,
+        expires_at=expires_at,
+    )
+
+
 @app.post("/api/backup/restore", response_model=BackupResponse)
 async def trigger_backup_restore(
-    request: RestoreRequest,
+    request: RestoreConfirmRequest,
     background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
 ) -> BackupResponse:
-    """Запуск восстановления бэкапа в фоне"""
+    """Подтвержденный запуск восстановления бэкапа в фоне."""
+    purge_expired_restore_approvals()
+    approval = restore_approvals.get(request.request_id)
+
+    if not approval:
+        raise HTTPException(
+            status_code=400,
+            detail="Сессия подтверждения истекла. Запустите подготовку снова.",
+        )
+
+    if approval.get("user_email") != current_user.get("email"):
+        raise HTTPException(status_code=403, detail="Чужая сессия подтверждения")
+
+    filename = str(approval.get("filename", ""))
+    if request.filename_confirmation.strip() != filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Подтверждение не совпадает с именем файла бэкапа",
+        )
+
     await enforce_daily_limit(current_user, ACTION_BACKUP_RESTORE)
-    background_tasks.add_task(restore_backup_job, request.filename)
+    background_tasks.add_task(restore_backup_job, filename)
+    restore_approvals.pop(request.request_id, None)
     await write_audit_log(
         user=current_user,
         action=ACTION_BACKUP_RESTORE,
-        resource=request.filename,
+        resource=filename,
         status="accepted",
     )
-    return BackupResponse(success=True, message=f"Restore process for {request.filename} started in background")
+    return BackupResponse(
+        success=True,
+        message=f"Restore process for {filename} started in background",
+    )
 
 
 @app.post("/api/trigger-cleanup", response_model=CleanupResponse)

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.core.security import encrypt_password
-from app.core.auth_utils import ROLE_ADMIN, ROLE_OPERATOR, require_roles
+from app.core.auth_utils import get_current_user
 from app.services.db_tester import test_postgresql_connection
 
 router = APIRouter()
@@ -18,7 +18,7 @@ class ConnectionSchema(BaseModel):
 @router.post("/test")
 async def add_connection(
     config: ConnectionSchema,
-    current_user=Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR)),
+    current_user=Depends(get_current_user),
 ):
     is_ok, message = await test_postgresql_connection(
         config.host, config.port, config.username, config.password, config.database_name
