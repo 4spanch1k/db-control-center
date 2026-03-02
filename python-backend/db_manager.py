@@ -71,6 +71,8 @@ class DatabaseManager:
                 "analytics_stats",
                 "backup_deletion_logs",
                 "audit_logs",
+                "plans",
+                "subscriptions",
                 "alembic_version",
             }
             rows = await conn.fetch(
@@ -625,3 +627,289 @@ class DatabaseManager:
         finally:
             if conn:
                 await self.pool.release(conn)
+
+    async def upsert_billing_plans(self, plans: list[dict]) -> None:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            for plan in plans:
+                await conn.execute(
+                    """
+                    INSERT INTO plans (
+                        code,
+                        name,
+                        description,
+                        role,
+                        price_monthly_cents,
+                        currency,
+                        stripe_price_id,
+                        is_active,
+                        sort_order
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (code) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        description = EXCLUDED.description,
+                        role = EXCLUDED.role,
+                        price_monthly_cents = EXCLUDED.price_monthly_cents,
+                        currency = EXCLUDED.currency,
+                        stripe_price_id = EXCLUDED.stripe_price_id,
+                        is_active = EXCLUDED.is_active,
+                        sort_order = EXCLUDED.sort_order,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    plan["code"],
+                    plan["name"],
+                    plan.get("description"),
+                    plan["role"],
+                    int(plan.get("price_monthly_cents", 0)),
+                    plan.get("currency", "usd"),
+                    plan.get("stripe_price_id"),
+                    bool(plan.get("is_active", True)),
+                    int(plan.get("sort_order", 0)),
+                )
+        except Exception as e:
+            logger.error(f"Error upserting billing plans: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_billing_plans(self, only_active: bool = True):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            if only_active:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        id,
+                        code,
+                        name,
+                        description,
+                        role,
+                        price_monthly_cents,
+                        currency,
+                        stripe_price_id,
+                        is_active,
+                        sort_order
+                    FROM plans
+                    WHERE is_active = TRUE
+                    ORDER BY sort_order ASC, created_at ASC
+                    """
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        id,
+                        code,
+                        name,
+                        description,
+                        role,
+                        price_monthly_cents,
+                        currency,
+                        stripe_price_id,
+                        is_active,
+                        sort_order
+                    FROM plans
+                    ORDER BY sort_order ASC, created_at ASC
+                    """
+                )
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error reading billing plans: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_billing_plan_by_code(self, code: str):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    id,
+                    code,
+                    name,
+                    description,
+                    role,
+                    price_monthly_cents,
+                    currency,
+                    stripe_price_id,
+                    is_active,
+                    sort_order
+                FROM plans
+                WHERE code = $1
+                LIMIT 1
+                """,
+                code,
+            )
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error reading billing plan by code: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_current_subscription(self, user_id: str):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    s.user_id,
+                    s.plan_id,
+                    s.status,
+                    s.provider,
+                    s.provider_customer_id,
+                    s.provider_subscription_id,
+                    s.provider_session_id,
+                    s.cancel_at_period_end,
+                    s.current_period_start,
+                    s.current_period_end,
+                    s.started_at,
+                    s.ended_at,
+                    s.updated_at,
+                    p.code AS plan_code,
+                    p.name AS plan_name,
+                    p.role AS plan_role,
+                    p.price_monthly_cents,
+                    p.currency
+                FROM subscriptions s
+                JOIN plans p ON p.id = s.plan_id
+                WHERE s.user_id = $1::uuid
+                LIMIT 1
+                """,
+                user_id,
+            )
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error reading current subscription: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def upsert_subscription_for_user(
+        self,
+        user_id: str,
+        plan_id: str,
+        status: str,
+        provider: str,
+        provider_customer_id: str | None = None,
+        provider_subscription_id: str | None = None,
+        provider_session_id: str | None = None,
+        cancel_at_period_end: bool = False,
+        current_period_start: datetime | None = None,
+        current_period_end: datetime | None = None,
+        ended_at: datetime | None = None,
+    ) -> bool:
+        conn = None
+        try:
+            conn = await self.get_connection()
+            await conn.execute(
+                """
+                INSERT INTO subscriptions (
+                    user_id,
+                    plan_id,
+                    status,
+                    provider,
+                    provider_customer_id,
+                    provider_subscription_id,
+                    provider_session_id,
+                    cancel_at_period_end,
+                    current_period_start,
+                    current_period_end,
+                    ended_at
+                )
+                VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    plan_id = EXCLUDED.plan_id,
+                    status = EXCLUDED.status,
+                    provider = EXCLUDED.provider,
+                    provider_customer_id = COALESCE(EXCLUDED.provider_customer_id, subscriptions.provider_customer_id),
+                    provider_subscription_id = COALESCE(EXCLUDED.provider_subscription_id, subscriptions.provider_subscription_id),
+                    provider_session_id = COALESCE(EXCLUDED.provider_session_id, subscriptions.provider_session_id),
+                    cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+                    current_period_start = EXCLUDED.current_period_start,
+                    current_period_end = EXCLUDED.current_period_end,
+                    ended_at = EXCLUDED.ended_at,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                user_id,
+                plan_id,
+                status,
+                provider,
+                provider_customer_id,
+                provider_subscription_id,
+                provider_session_id,
+                cancel_at_period_end,
+                current_period_start,
+                current_period_end,
+                ended_at,
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error upserting subscription: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_subscription_by_provider_subscription_id(
+        self,
+        provider: str,
+        provider_subscription_id: str,
+    ):
+        conn = None
+        try:
+            conn = await self.get_connection()
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    user_id,
+                    plan_id,
+                    status,
+                    provider,
+                    provider_customer_id,
+                    provider_subscription_id,
+                    provider_session_id,
+                    cancel_at_period_end,
+                    current_period_start,
+                    current_period_end,
+                    started_at,
+                    ended_at,
+                    created_at,
+                    updated_at
+                FROM subscriptions
+                WHERE provider = $1 AND provider_subscription_id = $2
+                LIMIT 1
+                """,
+                provider,
+                provider_subscription_id,
+            )
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error reading subscription by provider id: {e}")
+            raise
+        finally:
+            if conn:
+                await self.pool.release(conn)
+
+    async def get_user_id_by_subscription_provider_id(
+        self,
+        provider: str,
+        provider_subscription_id: str,
+    ) -> str | None:
+        subscription = await self.get_subscription_by_provider_subscription_id(
+            provider=provider,
+            provider_subscription_id=provider_subscription_id,
+        )
+        if not subscription:
+            return None
+        return str(subscription["user_id"])

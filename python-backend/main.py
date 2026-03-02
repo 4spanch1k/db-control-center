@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
 from app.core.auth_utils import ROLE_ADMIN, ROLE_OPERATOR, get_current_user, require_roles
 from pydantic import BaseModel
+from app.api.endpoints.billing import get_default_billing_plans
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -175,6 +176,7 @@ async def initialize_managers() -> None:
         password=DB_PASSWORD,
     )
     await db_manager.connect()
+    await db_manager.upsert_billing_plans(get_default_billing_plans())
 
     # Инициализация S3 Manager
     s3_manager = S3Manager(
@@ -490,6 +492,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints.connections import router as connections_router
 from app.api.endpoints.auth import router as auth_router
 from app.api.endpoints.users import router as users_router
+from app.api.endpoints.billing import router as billing_router
 
 app = FastAPI(
     title="DB Control Center Python Backend",
@@ -509,6 +512,7 @@ app.add_middleware(
 app.include_router(connections_router, prefix="/api/connections", tags=["connections"])
 app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(users_router, prefix="/api", tags=["users"])
+app.include_router(billing_router, prefix="/api", tags=["billing"])
 
 
 # ============================================================================
@@ -838,6 +842,8 @@ async def root():
             "trigger_analytics": "POST /api/trigger-analytics",
             "audit_logs": "GET /api/audit/logs",
             "usage_limits": "GET /api/usage/limits",
+            "billing_current": "GET /api/billing/current",
+            "billing_checkout": "POST /api/billing/checkout",
             "docs": "/docs",
         },
     }

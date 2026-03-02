@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart, Database, History, Settings, PanelLeftClose, PanelLeftOpen, LogOut, Home, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { BarChart, Database, History, Settings, PanelLeftClose, PanelLeftOpen, LogOut, Home, ShieldCheck, Users, CreditCard, type LucideIcon } from "lucide-react";
 import styles from "./Sidebar.module.css";
 
 type UserRole = "admin" | "operator" | "viewer";
@@ -12,6 +12,7 @@ const menuItems: MenuItem[] = [
     { label: "Аналитика", href: "/analytics", icon: BarChart },
     { label: "История бэкапов", href: "/dashboard#history", icon: History },
     { label: "Настройки", href: "/settings", icon: Settings },
+    { label: "Тариф", href: "/billing", icon: CreditCard },
     { label: "Пользователи", href: "/users", icon: Users, roles: ["admin"] },
     { label: "Аудит", href: "/audit", icon: ShieldCheck, roles: ["admin"] },
 ];
