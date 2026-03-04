@@ -11,12 +11,14 @@ BACKEND_PY := $(VENV_BIN)/python
 ALEMBIC := $(VENV_BIN)/alembic
 UVICORN := $(VENV_BIN)/uvicorn
 
-.PHONY: help bootstrap dev down logs lint test verify frontend-build frontend-install frontend-dev backend-install backend-dev migrate-up migrate-down migrate-current migrate-create seed-admin backend-tests
+.PHONY: help bootstrap dev demo demo-frontend down logs lint test verify frontend-build frontend-install frontend-dev backend-install backend-dev migrate-up migrate-down migrate-current migrate-create seed-admin backend-tests
 
 help:
 	@echo "Available commands:"
 	@echo "  make bootstrap        # Install local dependencies"
 	@echo "  make dev              # Start all services via Docker Compose"
+	@echo "  make demo             # Demo startup (Docker Compose + build)"
+	@echo "  make demo-frontend    # Run only frontend in dev mode"
 	@echo "  make down             # Stop Docker Compose services"
 	@echo "  make logs             # Tail Docker Compose logs"
 	@echo "  make lint             # Run frontend lint + backend syntax check"
@@ -43,6 +45,14 @@ frontend-install:
 
 dev:
 	$(COMPOSE) up -d --build
+
+demo: dev
+	@echo "Demo services are running:"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  Backend:  http://localhost:8000"
+	@echo "  MinIO:    http://localhost:9001"
+
+demo-frontend: frontend-dev
 
 down:
 	$(COMPOSE) down

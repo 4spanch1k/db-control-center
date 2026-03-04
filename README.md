@@ -131,6 +131,19 @@ curl http://localhost:3000
 
 Подробнее: 📖 [DEPLOYMENT.md](DEPLOYMENT.md)
 
+### 🎬 Demo Runbook
+
+Для воспроизводимого локального демо с нуля используйте отдельную инструкцию:
+
+- [docs/DEMO.md](docs/DEMO.md)
+
+Коротко:
+
+```bash
+make demo            # поднять все сервисы
+make demo-frontend   # поднять только frontend (dev mode)
+```
+
 ## 🧭 Developer Workflow
 
 Единая точка входа для разработки:
@@ -330,6 +343,7 @@ SQL
 | Документ | Описание |
 |----------|---------|
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Развертывание и управление системой |
+| [docs/DEMO.md](docs/DEMO.md) | Пошаговый запуск демо с нуля |
 | [PYTHON_BACKEND_MIGRATION.md](PYTHON_BACKEND_MIGRATION.md) | Миграция с n8n на Python backend |
 | [ANALYTICS_README.md](ANALYTICS_README.md) | Подробное руководство по аналитике |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Архитектурные решения и обработка ошибок |
