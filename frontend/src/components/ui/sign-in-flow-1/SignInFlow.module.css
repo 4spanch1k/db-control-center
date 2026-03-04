@@ -1,0 +1,432 @@
+.page {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #020202;
+  color: #f5f5f5;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: pageEnter 420ms var(--transition-ease-out) both;
+}
+
+.loaderOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.loaderCard {
+  width: min(320px, calc(100% - 28px));
+  border-radius: 16px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 8px 4px;
+  animation: loaderEnter 220ms ease-out both;
+}
+
+.loaderText {
+  margin-top: -10px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.68);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+}
+
+.dotLayer {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.17) 1px, transparent 1px);
+  background-size: 14px 14px;
+  opacity: 0.35;
+  mask-image: radial-gradient(circle at 50% 38%, black 40%, transparent 95%);
+  animation: dotPulse 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 18%, rgba(230, 20, 40, 0.18), transparent 33%),
+    radial-gradient(circle at 86% 73%, rgba(0, 150, 220, 0.2), transparent 35%),
+    radial-gradient(circle at center, transparent 45%, rgba(0, 0, 0, 0.75) 100%);
+  pointer-events: none;
+}
+
+.navShell {
+  width: min(860px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.82);
+  backdrop-filter: blur(8px);
+  padding: 10px 12px;
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.985);
+  animation: navReveal 540ms var(--transition-ease-out) 80ms both;
+}
+
+.logoMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.logoMark span {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #e6e6e6;
+}
+
+.logoMark span:nth-child(1) {
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.logoMark span:nth-child(2) {
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.logoMark span:nth-child(3) {
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.logoMark span:nth-child(4) {
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.navLink {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+  position: relative;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.navLink::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.7);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms ease;
+}
+
+.navLink:hover {
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.navLink:hover::after {
+  transform: scaleX(1);
+}
+
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.navGhostButton,
+.navSolidButton {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    transform 140ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 220ms ease;
+}
+
+.navGhostButton {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.navSolidButton {
+  color: #0a0a0a;
+  background: linear-gradient(180deg, #f7f7f7 0%, #d9d9d9 100%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 0 28px rgba(255, 255, 255, 0.28);
+}
+
+.navGhostButton:hover,
+.navSolidButton:hover {
+  transform: translateY(-1px) scale(1.01);
+}
+
+.navGhostButton:hover {
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.1);
+}
+
+.navSolidButton:hover {
+  box-shadow: 0 0 32px rgba(255, 255, 255, 0.42);
+}
+
+.content {
+  width: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(80px, 12vh, 140px);
+  opacity: 0;
+  transform: translateY(14px);
+  animation: contentReveal 620ms var(--transition-ease-out) 160ms both;
+}
+
+.kicker {
+  font-size: 0.74rem;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.title {
+  margin-top: 16px;
+  font-size: clamp(2.1rem, 5.2vw, 4rem);
+  letter-spacing: -0.02em;
+  line-height: 1.06;
+  text-wrap: balance;
+}
+
+.subtitle {
+  margin-top: 12px;
+  max-width: 690px;
+  font-size: clamp(1rem, 2.2vw, 1.26rem);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.quickActions {
+  margin-top: 34px;
+  width: min(430px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.googleButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 14px 16px;
+  color: #ffffff;
+  font-size: 1rem;
+  transition: background-color 160ms ease, transform 140ms ease;
+}
+
+.googleButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.googleGlyph {
+  font-weight: 700;
+}
+
+.separator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.separator span {
+  height: 1px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.separator p {
+  color: rgba(255, 255, 255, 0.42);
+  text-transform: lowercase;
+  font-size: 0.88rem;
+}
+
+.emailForm {
+  position: relative;
+}
+
+.emailForm input {
+  width: 100%;
+  height: 54px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  text-align: center;
+  padding: 0 58px 0 18px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.emailForm input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.emailForm input:focus {
+  border-color: rgba(255, 255, 255, 0.44);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.emailForm button {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 160ms ease;
+}
+
+.emailForm button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.emailForm button:active {
+  transform: scale(0.96);
+}
+
+@keyframes dotPulse {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  50% {
+    opacity: 0.44;
+  }
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes navReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes contentReveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes loaderEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 820px) {
+  .page {
+    padding: 16px;
+  }
+
+  .navShell {
+    border-radius: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 12px;
+  }
+
+  .content {
+    margin-top: 64px;
+  }
+
+  .navLinks {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .navActions {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .navGhostButton,
+  .navSolidButton {
+    min-width: 140px;
+    text-align: center;
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import styles from "./login.module.css";
@@ -11,6 +11,13 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        const emailFromQuery = new URLSearchParams(window.location.search).get("email");
+        if (emailFromQuery) {
+            setEmail(emailFromQuery);
+        }
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
