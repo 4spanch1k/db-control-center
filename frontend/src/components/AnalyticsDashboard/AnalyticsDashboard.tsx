@@ -27,6 +27,7 @@ export default function AnalyticsDashboard({
   } = useAnalytics(refreshInterval);
 
   const [selectedPeriod, setSelectedPeriod] = useState('1 day');
+  const hasAnalyticsData = Boolean(summary || delta || recentData.length > 0);
 
   const handleRowClick = () => {
     // Открытие модального окна с деталями
@@ -36,7 +37,7 @@ export default function AnalyticsDashboard({
     <div className={styles.container}>
       {/* Заголовок */}
       <div className={styles.header}>
-        <h1 className={styles.title}>Обзор аналитики</h1>
+        <h1 className={styles.title}>Аналитика</h1>
         <p className={styles.subtitle}>
           Мониторинг состояния БД и управление бэкапами
         </p>
@@ -65,114 +66,125 @@ export default function AnalyticsDashboard({
         </div>
       </div>
 
-      {/* Ошибка */}
-      {error && (
-        <div className={styles.errorBanner}>
-          <div className={styles.errorIcon}>⚠️</div>
-          <div className={styles.errorContent}>
-            <h3 className={styles.errorTitle}>Предупреждение</h3>
-            <p className={styles.errorMessage}>{error}</p>
-          </div>
+      {!loading && !hasAnalyticsData ? (
+        <div className={styles.emptyState}>
+          <h2 className={styles.emptyTitle}>Скоро здесь появится аналитика</h2>
+          <p className={styles.emptyText}>
+            После первых операций бэкапа и сбора метрик этот раздел заполнится данными.
+          </p>
         </div>
-      )}
-
-      {/* Главные метрики */}
-      <div className={styles.metricsGrid}>
-        <MetricsCard
-          title="Бэкапы"
-          value={summary?.current_backups_count ?? 0}
-          icon={Package}
-          footer="Всего бэкапов"
-          loading={loading}
-        />
-        <MetricsCard
-          title="Размер бэкапов"
-          value={formatBytes(summary?.current_backups_size ?? 0)}
-          icon={HardDrive}
-          footer="Общий объем"
-          loading={loading}
-        />
-        <MetricsCard
-          title="Сэкономлено"
-          value={formatBytes(delta?.saved_space ?? 0)}
-          icon={DollarSign}
-          change={delta?.space_efficiency_percent}
-          changeLabel="эффективность"
-          loading={loading}
-        />
-        <MetricsCard
-          title="Таблицы БД"
-          value={summary?.db_tables ?? 0}
-          icon={List}
-          footer="Структуры БД"
-          loading={loading}
-        />
-        <MetricsCard
-          title="Здоровье БД"
-          value={`${summary?.db_health_score ?? 0}%`}
-          icon={HeartPulse}
-          footer="Статус здоровья"
-          loading={loading}
-        />
-        <MetricsCard
-          title="Подключения"
-          value={summary?.active_connections ?? 0}
-          icon={Plug}
-          footer="Активных соединений"
-          loading={loading}
-        />
-      </div>
-
-      {/* Таблица аналитики */}
-      <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>📊 История аналитики</h2>
-        <div className={styles.tableContainer}>
-          {loading ? (
-            <div className={styles.loadingSpinner}>
-              <div className={styles.spinner} />
-              <span className={styles.spinnerText}>Загрузка данных...</span>
+      ) : (
+        <>
+          {/* Ошибка */}
+          {error && (
+            <div className={styles.errorBanner}>
+              <div className={styles.errorIcon}>⚠️</div>
+              <div className={styles.errorContent}>
+                <h3 className={styles.errorTitle}>Предупреждение</h3>
+                <p className={styles.errorMessage}>{error}</p>
+              </div>
             </div>
-          ) : (
-            <AnalyticsTable
-              data={recentData}
-              onRowClick={handleRowClick}
-              maxRows={30}
-            />
           )}
-        </div>
-      </div>
 
-      {/* Дополнительная информация */}
-      {delta && (
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>📈 Анализ эффективности</h2>
-          <div className={styles.detailsGrid}>
-            <div className={styles.detailCard}>
-              <div className={styles.detailLabel}>Текущий объем бэкапов</div>
-              <div className={styles.detailValue}>
-                {formatBytes(delta.current_backups_size)}
-              </div>
-            </div>
-            <div className={styles.detailCard}>
-              <div className={styles.detailLabel}>Сэкономленное место</div>
-              <div className={styles.detailValue}>
-                {formatBytes(delta.saved_space)}
-              </div>
-            </div>
-            <div className={styles.detailCard}>
-              <div className={styles.detailLabel}>Всего когда-либо сохранено</div>
-              <div className={styles.detailValue}>
-                {formatBytes(delta.total_ever_stored)}
-              </div>
-            </div>
-            <div className={styles.detailCard}>
-              <div className={styles.detailLabel}>Эффективность очистки</div>
-              <div className={styles.detailValue}>
-                {delta.space_efficiency_percent}%
-              </div>
+          {/* Главные метрики */}
+          <div className={styles.metricsGrid}>
+            <MetricsCard
+              title="Бэкапы"
+              value={summary?.current_backups_count ?? 0}
+              icon={Package}
+              footer="Всего бэкапов"
+              loading={loading}
+            />
+            <MetricsCard
+              title="Размер бэкапов"
+              value={formatBytes(summary?.current_backups_size ?? 0)}
+              icon={HardDrive}
+              footer="Общий объем"
+              loading={loading}
+            />
+            <MetricsCard
+              title="Сэкономлено"
+              value={formatBytes(delta?.saved_space ?? 0)}
+              icon={DollarSign}
+              change={delta?.space_efficiency_percent}
+              changeLabel="эффективность"
+              loading={loading}
+            />
+            <MetricsCard
+              title="Таблицы БД"
+              value={summary?.db_tables ?? 0}
+              icon={List}
+              footer="Структуры БД"
+              loading={loading}
+            />
+            <MetricsCard
+              title="Здоровье БД"
+              value={`${summary?.db_health_score ?? 0}%`}
+              icon={HeartPulse}
+              footer="Статус здоровья"
+              loading={loading}
+            />
+            <MetricsCard
+              title="Подключения"
+              value={summary?.active_connections ?? 0}
+              icon={Plug}
+              footer="Активных соединений"
+              loading={loading}
+            />
+          </div>
+
+          {/* Таблица аналитики */}
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>📊 История аналитики</h2>
+            <div className={styles.tableContainer}>
+              {loading ? (
+                <div className={styles.loadingSpinner}>
+                  <div className={styles.spinner} />
+                  <span className={styles.spinnerText}>Загрузка данных...</span>
+                </div>
+              ) : (
+                <AnalyticsTable
+                  data={recentData}
+                  onRowClick={handleRowClick}
+                  maxRows={30}
+                />
+              )}
             </div>
           </div>
-        </div>
+
+          {/* Дополнительная информация */}
+          {delta && (
+            <div className={styles.section}>
+              <h2 className={styles.sectionTitle}>📈 Анализ эффективности</h2>
+              <div className={styles.detailsGrid}>
+                <div className={styles.detailCard}>
+                  <div className={styles.detailLabel}>Текущий объем бэкапов</div>
+                  <div className={styles.detailValue}>
+                    {formatBytes(delta.current_backups_size)}
+                  </div>
+                </div>
+                <div className={styles.detailCard}>
+                  <div className={styles.detailLabel}>Сэкономленное место</div>
+                  <div className={styles.detailValue}>
+                    {formatBytes(delta.saved_space)}
+                  </div>
+                </div>
+                <div className={styles.detailCard}>
+                  <div className={styles.detailLabel}>Всего когда-либо сохранено</div>
+                  <div className={styles.detailValue}>
+                    {formatBytes(delta.total_ever_stored)}
+                  </div>
+                </div>
+                <div className={styles.detailCard}>
+                  <div className={styles.detailLabel}>Эффективность очистки</div>
+                  <div className={styles.detailValue}>
+                    {delta.space_efficiency_percent}%
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

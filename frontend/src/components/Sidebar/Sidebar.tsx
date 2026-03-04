@@ -10,7 +10,7 @@ type PlanCode = "free" | "pro" | "max";
 type MenuItem = { label: string; href: string; icon: LucideIcon };
 
 const menuItems: MenuItem[] = [
-  { label: "Управление БД", href: "/dashboard", icon: Database },
+  { label: "Обзор", href: "/dashboard", icon: Database },
   { label: "Аналитика", href: "/analytics", icon: BarChart },
   { label: "Как пользоваться", href: "/guide", icon: BookOpen },
   { label: "Тариф", href: "/billing", icon: CreditCard },
