@@ -13,6 +13,40 @@
   font-size: 0.94rem;
 }
 
+.preferenceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preferenceLabel {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.languageSelect {
+  width: min(280px, 100%);
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: 0 10px;
+  font-size: 0.9rem;
+}
+
+.languageSelect:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary, #3b82f6) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.preferenceHint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+}
+
 .form {
   display: flex;
   flex-direction: column;
