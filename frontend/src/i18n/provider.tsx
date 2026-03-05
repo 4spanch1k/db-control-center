@@ -42,14 +42,13 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>("en");
-
-  useEffect(() => {
-    const savedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    if (savedLanguage && isLanguage(savedLanguage)) {
-      setLanguageState(savedLanguage);
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (typeof window === "undefined") {
+      return "en";
     }
-  }, []);
+    const savedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return savedLanguage && isLanguage(savedLanguage) ? savedLanguage : "en";
+  });
 
   useEffect(() => {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, language);

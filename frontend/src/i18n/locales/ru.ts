@@ -17,6 +17,7 @@ export const ru: LocaleDictionary = {
     connectionWizardTitle: "Мастер подключения БД",
     fieldConnectionName: "Название подключения",
     fieldDbType: "Тип БД",
+    fieldDbTypePostgres: "PostgreSQL",
     fieldPort: "Порт",
     fieldHost: "Хост",
     fieldDatabaseName: "База данных",

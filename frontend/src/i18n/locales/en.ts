@@ -15,6 +15,7 @@ export const en = {
     connectionWizardTitle: "Database Connection Wizard",
     fieldConnectionName: "Connection name",
     fieldDbType: "Database type",
+    fieldDbTypePostgres: "PostgreSQL",
     fieldPort: "Port",
     fieldHost: "Host",
     fieldDatabaseName: "Database name",
