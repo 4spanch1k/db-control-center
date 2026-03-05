@@ -1,8 +1,8 @@
 import AnalyticsDashboard from '@/components/AnalyticsDashboard/AnalyticsDashboard';
 
 export const metadata = {
-  title: 'Аналитический дашборд | DB Control Center',
-  description: 'Мониторинг состояния БД и управление бэкапами',
+  title: 'Аналитика | DB Control Center',
+  description: 'Метрики и история состояния базы данных',
 };
 
 export default function AnalyticsPage() {

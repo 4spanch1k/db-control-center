@@ -179,6 +179,26 @@
   color: var(--color-text-secondary);
 }
 
+.emptyState {
+  margin-top: 8px;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  padding: 28px;
+  background: color-mix(in srgb, var(--color-bg-secondary) 96%, #ffffff 4%);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--color-text);
+}
+
+.emptyText {
+  margin-top: 10px;
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+}
+
 @media (max-width: 1200px) {
   .metricsGrid {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

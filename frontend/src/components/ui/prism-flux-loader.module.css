@@ -1,0 +1,54 @@
+.wrapper {
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.scene {
+  perspective: 800px;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.scene::before {
+  content: "";
+  position: absolute;
+  width: 84px;
+  height: 84px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 68%);
+  filter: blur(14px);
+  opacity: 0.38;
+  transform: translateZ(0);
+  pointer-events: none;
+}
+
+.cube {
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  backface-visibility: hidden;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.08);
+}
+
+.status {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

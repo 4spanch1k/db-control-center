@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card/Card";
 import styles from "./page.module.css";
+import { useI18n, useT } from "@/i18n";
+import type { Language } from "@/i18n";
 
 interface ConnectionForm {
   name: string;
@@ -15,6 +17,8 @@ interface ConnectionForm {
 }
 
 export default function SettingsPage() {
+  const { language, setLanguage } = useI18n();
+  const t = useT();
   const [form, setForm] = useState<ConnectionForm>({
     name: "Main PostgreSQL",
     db_type: "postgresql",
@@ -56,33 +60,60 @@ export default function SettingsPage() {
 
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.detail || "Не удалось проверить подключение");
+        throw new Error(payload?.detail || t("settings.connectionTestError"));
       }
 
-      setMessage("Подключение проверено и сохранено. Теперь можно делать бэкапы на дашборде.");
+      setMessage(t("settings.connectionSaved"));
       setForm((prev) => ({ ...prev, password: "" }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка подключения");
+      setError(e instanceof Error ? e.message : t("settings.connectionErrorGeneric"));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setLanguage(event.target.value as Language);
+  };
+
   return (
     <main className={styles.main}>
-      <h1 className={styles.title}>Настройки</h1>
+      <h1 className={styles.title}>{t("settings.title")}</h1>
       <p className={styles.subtitle}>
-        Шаг 1: подключите свою PostgreSQL базу. После успешной проверки система сохранит конфигурацию.
+        {t("settings.subtitle")}
       </p>
 
       <Card>
         <CardHeader>
-          <CardTitle>Мастер подключения БД</CardTitle>
+          <CardTitle>{t("settings.preferencesTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className={styles.preferenceGroup}>
+            <label className={styles.preferenceLabel} htmlFor="language">
+              {t("settings.languageTitle")}
+            </label>
+            <select
+              id="language"
+              className={styles.languageSelect}
+              value={language}
+              onChange={handleLanguageChange}
+            >
+              <option value="en">{t("settings.languageOptionEnglish")}</option>
+              <option value="ru">{t("settings.languageOptionRussian")}</option>
+            </select>
+            <p className={styles.preferenceHint}>{t("settings.languageHelp")}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("settings.connectionWizardTitle")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form className={styles.form} onSubmit={handleSubmit}>
             <label className={styles.field}>
-              <span>Название подключения</span>
+              <span>{t("settings.fieldConnectionName")}</span>
               <input
                 className={styles.input}
                 value={form.name}
@@ -93,17 +124,17 @@ export default function SettingsPage() {
 
             <div className={styles.row}>
               <label className={styles.field}>
-                <span>Тип БД</span>
+                <span>{t("settings.fieldDbType")}</span>
                 <select
                   className={styles.input}
                   value={form.db_type}
                   onChange={(e) => handleChange("db_type", e.target.value)}
                 >
-                  <option value="postgresql">PostgreSQL</option>
+                  <option value="postgresql">{t("settings.fieldDbTypePostgres")}</option>
                 </select>
               </label>
               <label className={styles.field}>
-                <span>Порт</span>
+                <span>{t("settings.fieldPort")}</span>
                 <input
                   className={styles.input}
                   type="number"
@@ -118,7 +149,7 @@ export default function SettingsPage() {
 
             <div className={styles.row}>
               <label className={styles.field}>
-                <span>Хост</span>
+                <span>{t("settings.fieldHost")}</span>
                 <input
                   className={styles.input}
                   value={form.host}
@@ -127,7 +158,7 @@ export default function SettingsPage() {
                 />
               </label>
               <label className={styles.field}>
-                <span>База данных</span>
+                <span>{t("settings.fieldDatabaseName")}</span>
                 <input
                   className={styles.input}
                   value={form.database_name}
@@ -138,7 +169,7 @@ export default function SettingsPage() {
 
             <div className={styles.row}>
               <label className={styles.field}>
-                <span>Пользователь</span>
+                <span>{t("settings.fieldUsername")}</span>
                 <input
                   className={styles.input}
                   value={form.username}
@@ -147,7 +178,7 @@ export default function SettingsPage() {
                 />
               </label>
               <label className={styles.field}>
-                <span>Пароль</span>
+                <span>{t("settings.fieldPassword")}</span>
                 <input
                   className={styles.input}
                   type="password"
@@ -159,7 +190,7 @@ export default function SettingsPage() {
             </div>
 
             <button className={styles.submitButton} type="submit" disabled={loading}>
-              {loading ? "Проверяем..." : "Проверить и сохранить"}
+              {loading ? t("settings.submitLoading") : t("settings.submitIdle")}
             </button>
           </form>
 
