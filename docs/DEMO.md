@@ -1,82 +1,110 @@
 # Demo Runbook
 
-This guide brings DB Control Center to a reproducible local demo state from zero.
+Руководство для воспроизводимого демо DB Control Center с нуля.
 
-## 1) Prerequisites
+## 1) Требования
 
-- Docker + Docker Compose plugin
+- Docker Desktop (или Docker Engine) + `docker compose`
 - Node.js 20+
 - Python 3.11+
 
-## 2) Start Docker daemon
+## 2) Включить Docker daemon
 
-If you see `Cannot connect to the Docker daemon`, start Docker first:
+Если видите `Cannot connect to the Docker daemon`, сначала запустите daemon:
 
-- macOS: open Docker Desktop and wait until it shows `Engine running`.
+- macOS: откройте Docker Desktop и дождитесь статуса `Engine running`
 - Linux: `sudo systemctl start docker`
-- Windows: start Docker Desktop and wait for the engine.
+- Windows: запустите Docker Desktop и дождитесь запуска engine
 
-Quick check:
+Проверка:
 
 ```bash
-docker info >/dev/null && echo "Docker is running"
+docker info >/dev/null && echo "Docker daemon is running"
 ```
 
-## 3) Minimal environment variables
+Ожидаемый результат: печатается `Docker daemon is running`.
 
-Create local env file from template:
+## 3) Минимальные переменные окружения
+
+Создайте локальный `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Minimal required values (defaults in `.env.example` are enough for local demo):
+Минимально нужны (дефолтов из `.env.example` достаточно для локального демо):
 
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 - `MINIO_ENDPOINT`, `MINIO_USER`, `MINIO_PASSWORD`, `MINIO_BUCKET`
 - `JWT_SECRET_KEY`, `JWT_REFRESH_SECRET_KEY`
 - `PYTHON_BACKEND_URL`
+- `AUTO_APPLY_MIGRATIONS=true` (чтобы backend сам применил Alembic на старте)
 
-## 4) One-command demo startup (all services)
+## 4) Запуск демо одной командой
 
 ```bash
 make demo
 ```
 
-Equivalent raw command:
+Команда-эквивалент:
 
 ```bash
 docker compose up -d --build
 ```
 
-Services:
+Проверка:
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- MinIO Console: http://localhost:9001
+```bash
+docker compose ps
+```
+
+Ожидаемый результат: подняты как минимум `metadata-postgres`, `target-postgres`, `minio`, `python_backend` (и обычно `app`).
 
 ## 5) Alembic migrations
 
-In this project migrations are auto-applied by backend if:
+По умолчанию backend применяет миграции автоматически при `AUTO_APPLY_MIGRATIONS=true`.
 
-- `AUTO_APPLY_MIGRATIONS=true`
-
-Manual migration command (if auto-apply is disabled):
+Если авто-миграции отключены, примените вручную:
 
 ```bash
 make bootstrap
 make migrate-up
 ```
 
-## 6) Frontend-only run (single command)
+Проверка:
+
+```bash
+cd python-backend && ../.venv/bin/alembic current
+```
+
+Ожидаемый результат: показан текущий `head` revision.
+
+## 6) Фронтенд отдельно одной командой
+
+Вариант через Make:
 
 ```bash
 make demo-frontend
 ```
 
-This starts Next.js dev server locally.
+Или напрямую (как в чек-листе локальной проверки):
 
-## 7) Stop demo
+```bash
+cd frontend && npm run dev
+```
+
+Ожидаемый результат: Next.js dev server запущен на `http://localhost:3000`.
+
+## 7) Полезные проверки после запуска
+
+```bash
+curl http://localhost:8000/health
+curl -I http://localhost:3000
+```
+
+Ожидаемый результат: backend отвечает `200`, фронтенд доступен.
+
+## 8) Остановить демо
 
 ```bash
 make down
